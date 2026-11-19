@@ -1052,13 +1052,28 @@ function centerLoad(pallet){
         box.y+=dy;
     }
 }
+function loadingInversions(pallet){
+    let penalty=0;
+    for(const upper of pallet.boxes){
+        if(upper.z===0)continue;
+        for(const lower of pallet.boxes){
+            if(lower.z>=upper.z||lower.kind===upper.kind)continue;
+            const overlap=overlapArea(upper,lower);
+            if(overlap<=1e-8)continue;
+            const area=upper.l*upper.p, lowerArea=lower.l*lower.p;
+            penalty+=overlap/area * (Math.max(0,1-lowerArea/area)+Math.max(0,1-lower.weight/upper.weight));
+        }
+    }
+    return penalty;
+}
 function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const out=[];
     while(pending.length){
         const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase)).filter(c=>c.p.boxes.length);
+        if(allowFlatBase)for(const candidate of candidates)candidate.inversions=loadingInversions(candidate.p);
         candidates.sort((a,b)=>b.p.volume-a.p.volume||b.p.boxes.length-a.p.boxes.length||
-            Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.p.l*a.p.p-b.p.l*b.p.p||a.uneven-b.uneven);
+            (a.inversions??0)-(b.inversions??0)||Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.p.l*a.p.p-b.p.l*b.p.p||a.uneven-b.uneven);
         if(!candidates.length)return null;
         const {p,remaining}=candidates[0];
         fillExposedTop(p,height);
