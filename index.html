@@ -1033,7 +1033,10 @@ function layeredCandidates(dim,items,groups,height,allowSmallFace){
     // Keep intermediate cartons available for a separate base when enough are present.
     const reservedKinds=new Set(groups.size>2?other.filter(item=>
         item.l*item.p>smallestArea&&groups.get(item.kind).count>=2).map(item=>item.kind):[]);
-    const layouts=uniformGridCandidates(dim,own,height);
+    const grids=uniformGridCandidates(dim,own,height);
+    const floorCount=({p})=>p.boxes.filter(box=>box.z===0).length;
+    const widest=Math.max(0,...grids.map(floorCount));
+    const layouts=grids.filter(grid=>floorCount(grid)===widest);
     for(const {p} of layouts)p.free=[];
     const wheel=pinwheelPallet(dim,box);
     if(wheel&&own.length>=4){
@@ -1198,11 +1201,25 @@ function loadingInversions(pallet){
     }
     return penalty;
 }
+function baseLayerDeficit(plan){
+    let deficit=0;
+    for(const p of plan){
+        const floor=p.boxes.filter(box=>box.z===0);
+        if(!floor.length||floor.some(box=>box.kind!==floor[0].kind))continue;
+        const box=floor[0];
+        if(floor.some(other=>other.h!==box.h))continue;
+        const upright=Math.floor(p.l/box.l+1e-9)*Math.floor(p.p/box.p+1e-9);
+        const turned=Math.floor(p.l/box.p+1e-9)*Math.floor(p.p/box.l+1e-9);
+        const available=p.boxes.filter(other=>other.kind===box.kind&&other.h===box.h).length;
+        deficit+=Math.max(0,Math.min(available,Math.max(upright,turned))-floor.length);
+    }
+    return deficit;
+}
 function compareShipments(a,b){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
     const area=plan=>plan.reduce((sum,p)=>sum+p.l*p.p,0);
     const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
-    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||volume(a)-volume(b);
+    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
 }
 function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
