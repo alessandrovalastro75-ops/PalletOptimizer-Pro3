@@ -116,6 +116,12 @@ html,body{background:#fff}
 .project-actions{display:flex;flex-wrap:wrap;gap:6px}
 #projectMessage{width:100%;margin:0}
 #projectMessage:empty{display:none}
+.project-dialog{background:#101f33;color:white;border:1px solid #516381;border-radius:14px;width:min(440px,92vw)}
+.project-dialog::backdrop{background:#030917bb}
+.project-dialog input{display:block;width:100%;margin:8px 0;background:#081325;color:white;border:1px solid #527297;border-radius:6px;padding:8px}
+.project-dialog button{background:#25476b;color:white;border-radius:7px;padding:8px 10px;margin:4px 3px 4px 0}
+#projectSaveError{color:#ffcf78;margin:6px 0}
+#savedProjectList{display:grid;max-height:45vh;overflow:auto}
 </style><style>
 .shipment-volume{margin:10px 0 0;padding-top:7px;border-top:1px solid #435979;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px}
 .shipment-volume strong{color:#ffd27b}
@@ -191,6 +197,24 @@ html,body{background:#fff}
 <footer class="assembly-footer"><button type="button" id="assemblySaveProject">Salva progetto</button><button type="button" id="assemblyAdd" disabled>Aggiungi al progetto</button></footer>
 <section id="assemblyReview" hidden aria-label="Verifica disposizione"><div><h3>Verifica della pedana</h3><ul id="assemblyWarnings"></ul>
 <div class="assembly-tools"><button type="button" id="assemblyConfirm">Conferma la disposizione</button><button type="button" id="assemblyRestart">Riposiziona carico</button></div></div></section>
+</dialog>
+<dialog id="projectSaveDialog" class="project-dialog">
+<form id="projectNameForm">
+<label for="projectName"><strong>Nome progetto</strong></label>
+<input id="projectName" maxlength="100" required autocomplete="off">
+<p id="projectSaveError" role="status"></p>
+<div id="projectDuplicate" hidden>
+<button type="button" id="changeProjectName">Cambia nome</button>
+<button type="button" id="overwriteProject">Sovrascrivi</button>
+</div>
+<button type="submit" id="confirmProjectName">Salva</button>
+<button type="button" id="cancelProjectSave">Annulla</button>
+</form>
+</dialog>
+<dialog id="projectOpenDialog" class="project-dialog">
+<form method="dialog"><button aria-label="Chiudi">✕</button></form>
+<h2>Apri progetto</h2><div id="savedProjectList"></div>
+<button type="button" id="importProjectFile">Importa file JSON</button>
 </dialog>
 <dialog id="detailDialog"><form method="dialog"><button aria-label="Chiudi dettagli">✕</button></form><div id="detailBody"></div></dialog>
 <dialog id="manualDialog"><form method="dialog"><button aria-label="Chiudi modifica">✕</button></form>
@@ -997,7 +1021,29 @@ function uniformGridCandidates(dim,items,height){
         return [{p:pallet,remaining:items.slice(count),uneven:0}];
     });
 }
-function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBase=false){
+function layeredCandidates(dim,items,groups,height,allowSmallFace){
+    const box=items[0];
+    const own=items.filter(item=>item.kind===box.kind);
+    const other=items.filter(item=>item.kind!==box.kind);
+    const smallestArea=Math.min(...other.map(item=>item.l*item.p));
+    // Keep intermediate cartons available for a separate base when enough are present.
+    const reservedKinds=new Set(groups.size>2?other.filter(item=>
+        item.l*item.p>smallestArea&&groups.get(item.kind).count>=2).map(item=>item.kind):[]);
+    const layouts=uniformGridCandidates(dim,own,height);
+    for(const {p} of layouts)p.free=[];
+    const wheel=pinwheelPallet(dim,box);
+    if(wheel&&own.length>=4){
+        const pending=own.filter(item=>!put(wheel,item,height,weightLimit,Infinity,true));
+        const remaining=pending.filter(item=>!put(wheel,item,height,weightLimit,Infinity));
+        layouts.push({p:wheel,remaining});
+    }
+    return layouts.map(({p,remaining})=>{
+        p.allowSmallFace=allowSmallFace;
+        const next=other.filter(item=>reservedKinds.has(item.kind)||!put(p,item,height,weightLimit,Infinity));
+        return {p,remaining:[...remaining,...next],uneven:unevenLayers(p),layeredBase:true};
+    });
+}
+function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBase=false, layered=false){
     const layouts = [emptyPallet(dim)];
     const groups = new Map();
     for (const box of items) {
@@ -1032,6 +1078,7 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
     });
     if(groups.size===1)candidates.push(...uniformGridCandidates(dim,items,height));
     else if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
+    if(layered&&groups.size>1)candidates.push(...layeredCandidates(dim,items,groups,height,allowSmallFace));
     return candidates;
 }
 function unevenLayers(p){
@@ -1094,7 +1141,11 @@ function fillExposedTop(p,height){
 function planOrder(items,dims,height,balanced,allowFlatBase=false){
     const upright=buildPlan(items,dims,height,balanced,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,balanced,true,allowFlatBase):null;
-    const plan=alternative&&(!upright||alternative.length<upright.length)?alternative:upright;
+    let plan=alternative&&(!upright||alternative.length<upright.length)?alternative:upright;
+    if(allowFlatBase&&new Set(items.map(box=>box.kind)).size>1){
+        const layered=buildPlan(items,dims,height,balanced,false,true,true);
+        if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
+    }
     if(plan)plan.forEach(centerLoad);
     return plan;
 }
@@ -1125,13 +1176,22 @@ function loadingInversions(pallet){
     }
     return penalty;
 }
-function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase){
+function compareShipments(a,b){
+    const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
+    const area=plan=>plan.reduce((sum,p)=>sum+p.l*p.p,0);
+    const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
+    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||volume(a)-volume(b);
+}
+function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const out=[];
     while(pending.length){
-        const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase)).filter(c=>c.p.boxes.length);
+        const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase,layered)).filter(c=>c.p.boxes.length);
         if(allowFlatBase)for(const candidate of candidates)candidate.inversions=loadingInversions(candidate.p);
-        candidates.sort((a,b)=>b.p.boxes.length-a.p.boxes.length||
+        if(layered)for(const candidate of candidates){
+            candidate.leadingCount=candidate.p.boxes.filter(box=>box.kind===pending[0].kind).length;
+        }
+        candidates.sort((a,b)=>(layered?(Number(a.inversions>1e-8)-Number(b.inversions>1e-8)||b.leadingCount-a.leadingCount||Number(Boolean(b.layeredBase))-Number(Boolean(a.layeredBase))):0)||b.p.boxes.length-a.p.boxes.length||
             a.p.l*a.p.p-b.p.l*b.p.p||b.p.volume-a.p.volume||(a.inversions??0)-(b.inversions??0)||
             Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
         if(!candidates.length)return null;
@@ -1139,6 +1199,7 @@ function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase){
         fillExposedTop(p,height);
         out.push(p);pending.length=0;
         pending.push(...remaining);
+        if(layered)pending.sort((a,b)=>b.l*b.p-a.l*a.p||b.weight-a.weight||b.h-a.h);
     }
     if(!balanced||out.length===1)return out;
     const meanWeight=tare+items.reduce((s,b)=>s+b.weight,0)/out.length;
@@ -2099,18 +2160,76 @@ function projectSnapshot(){
         pallets:pallets.map(p=>({...snapshotPallet(p),manual:composedPallets.includes(p)})),
         draft:assembly?{...snapshotPallet(assembly),floorBoxes:assembly.floorBoxes,level:Number(el('assemblyZ').value),autoLevel:el('assemblyAutoZ').checked}:null};
 }
+const projectArchiveKey='po_saved_projects';
+let overwriteName=null;
+function projectArchive(){
+    return JSON.parse(localStorage.getItem(projectArchiveKey)||'[]');
+}
+function projectNameKey(name){return name.trim().normalize('NFC').toLocaleLowerCase('it-IT');}
+function clearProjectConflict(){
+    overwriteName=null;
+    el('projectDuplicate').hidden=true;
+    el('confirmProjectName').hidden=false;
+    el('projectSaveError').textContent='';
+}
+let currentProjectName='';
 function saveProject(){
-    const data=projectSnapshot();
-    const order=data.order.trim().replace(/[^a-zA-Z0-9_-]+/g,'-');
+    clearProjectConflict();
+    const input=el('projectName');
+    input.value=currentProjectName||el('orderNumber').value.trim();
+    el('projectSaveDialog').showModal();
+    input.focus();
+    input.select();
+}
+function downloadProject(data,name){
     const link=document.createElement('a');
     const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
     link.href=url;
-    link.download='PalletOptimizer_Progetto'+(order?'_'+order:'')+'.json';
+    link.download=name.replace(/[<>:"/\\|?*]/g,'-').replace(/[. ]+$/,'')+'.json';
     document.body.append(link);
     link.click();
     link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+function storeProject(name,replace){
+    const list=projectArchive(), key=projectNameKey(name);
+    const index=list.findIndex(entry=>projectNameKey(entry.name)===key);
+    if(index>=0&&!replace)return false;
+    const data={...projectSnapshot(),projectName:name};
+    if(index>=0)list[index]={name,data};else list.push({name,data});
+    localStorage.setItem(projectArchiveKey,JSON.stringify(list));
+    currentProjectName=name;
+    return data;
+}
+function submitProjectName(replace=false){
+    const name=el('projectName').value.trim();
+    if(!name||!name.replace(/[. ]/g,'')){
+        el('projectSaveError').textContent='Inserisci un nome per il progetto.';
+        return;
+    }
+    try{
+        const data=storeProject(name,replace&&overwriteName===projectNameKey(name));
+        if(!data){
+            overwriteName=projectNameKey(name);
+            el('projectSaveError').textContent='Esiste già un progetto con questo nome. Vuoi cambiarlo o sovrascriverlo?';
+            el('projectDuplicate').hidden=false;
+            el('confirmProjectName').hidden=true;
+            el('changeProjectName').focus();
+            return;
+        }
+        el('projectSaveDialog').close();
+        el('projectMessage').textContent='Progetto salvato: '+name;
+        if(composeDialog.open)assemblyMessage('Progetto salvato: '+name);
+        downloadProject(data,name);
+    }catch{
+        el('projectSaveError').textContent='Salvataggio non disponibile. Controlla lo spazio del browser.';
+    }
+}
+el('projectNameForm').onsubmit=event=>{event.preventDefault();submitProjectName();};
+el('projectName').oninput=clearProjectConflict;
+el('changeProjectName').onclick=()=>{clearProjectConflict();el('projectName').focus();el('projectName').select();};
+el('overwriteProject').onclick=()=>submitProjectName(true);
+el('cancelProjectSave').onclick=()=>el('projectSaveDialog').close();
 function parseProject(data){
     function requireValid(condition){
         if(!condition)throw new Error('Il file non è un progetto PalletOptimizer Pro valido.');
@@ -2203,7 +2322,29 @@ function projectHasWork(){
 }
 el('saveProject').onclick=saveProject;
 el('assemblySaveProject').onclick=saveProject;
-el('openProject').onclick=()=>el('projectFile').click();
+el('openProject').onclick=()=>{
+    const list=el('savedProjectList');
+    list.replaceChildren();
+    try{
+        for(const entry of projectArchive()){
+            const button=document.createElement('button');
+            button.textContent=entry.name;
+            button.onclick=()=>{
+                try{
+                    const project=parseProject(entry.data);
+                    if(projectHasWork()&&!confirm('Aprire il progetto e sostituire il lavoro corrente?'))return;
+                    el('projectOpenDialog').close();
+                    setProject(project);
+                    currentProjectName=entry.name;
+                    el('projectMessage').textContent='Progetto aperto: '+entry.name;
+                }catch(error){el('projectMessage').textContent=error.message;}
+            };
+            list.append(button);
+        }
+    }catch{list.textContent='Archivio locale non disponibile.';}
+    el('projectOpenDialog').showModal();
+};
+el('importProjectFile').onclick=()=>{el('projectOpenDialog').close();el('projectFile').click();};
 el('projectFile').onchange=async event=>{
     const input=event.currentTarget,file=input.files[0];
     input.value='';
@@ -2212,12 +2353,14 @@ el('projectFile').onchange=async event=>{
         const project=parseProject(JSON.parse((await file.text()).replace(/^\uFEFF/,'')));
         if(projectHasWork()&&!confirm('Aprire il progetto e sostituire il lavoro corrente?'))return;
         setProject(project);
+        currentProjectName=typeof project.projectName==='string'?project.projectName:'';
         el('projectMessage').textContent='Progetto aperto.';
     }catch(error){el('projectMessage').textContent=error instanceof SyntaxError?'Il file non contiene JSON valido.':error.message;}
 };
 el('newProject').onclick=()=>{
     if(projectHasWork()&&!confirm('Svuotare il lavoro corrente? I progetti esportati e il catalogo restano disponibili.'))return;
     setProject({manifest:[],manualPallets:[],client:'',order:'',transport:'air',truckHeight:180,mode:'auto',formats:[],pallets:[],draft:null});
+    currentProjectName='';
     el('projectMessage').textContent='Nuovo progetto.';
 };
 
