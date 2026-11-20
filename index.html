@@ -1788,6 +1788,69 @@ function layersOf(p){
     }
     return [...groups].sort(([a],[b])=>a-b);
 }
+function orderVisibleFaces(faces){
+    const cross=(a,b,p)=>(b[0]-a[0])*(p[1]-a[1])-(b[1]-a[1])*(p[0]-a[0]);
+    const eps=1e-7;
+    const nodes=faces.map(face=>{
+        const [a,b,,d]=face.points;
+        const determinant=cross(a,b,d);
+        return {
+            face, determinant, incoming:0, next:[],
+            left:Math.min(...face.points.map(p=>p[0])), right:Math.max(...face.points.map(p=>p[0])),
+            top:Math.min(...face.points.map(p=>p[1])), bottom:Math.max(...face.points.map(p=>p[1])),
+            depthAt:p=>a[2]+(cross(a,p,d)*(b[2]-a[2])+cross(a,b,p)*(d[2]-a[2]))/determinant
+        };
+    }).sort((a,b)=>a.left-b.left);
+    // Clip the projected quadrilaterals to the screen area they share.
+    function overlap(a,b){
+        let polygon=a.face.points;
+        const edges=b.face.points;
+        for(let i=0;i<edges.length&&polygon.length;i++){
+            const start=edges[i],end=edges[(i+1)%edges.length];
+            const side=p=>cross(start,end,p)*Math.sign(b.determinant);
+            const clipped=[];
+            for(let j=0;j<polygon.length;j++){
+                const p=polygon[j],q=polygon[(j+1)%polygon.length];
+                const dp=side(p),dq=side(q);
+                if(dp>=0)clipped.push(p);
+                if((dp>=0)!==(dq>=0)){
+                    const t=dp/(dp-dq);
+                    clipped.push([p[0]+(q[0]-p[0])*t,p[1]+(q[1]-p[1])*t]);
+                }
+            }
+            polygon=clipped;
+        }
+        return polygon;
+    }
+    for(const [i,a] of nodes.entries()){
+        if(Math.abs(a.determinant)<eps)continue;
+        for(let j=i+1;j<nodes.length&&nodes[j].left<a.right-eps;j++){
+            const b=nodes[j];
+            if(Math.abs(b.determinant)<eps||b.top>=a.bottom-eps||a.top>=b.bottom-eps)continue;
+            const shared=overlap(a,b);
+            if(shared.length<3)continue;
+            const area=shared.slice(1,-1).reduce((sum,p,i)=>sum+cross(shared[0],p,shared[i+2]),0);
+            if(Math.abs(area)<eps)continue;
+            const deltas=shared.map(p=>a.depthAt(p)-b.depthAt(p));
+            const min=Math.min(...deltas),max=Math.max(...deltas);
+            if(min < -eps && max > eps)continue; // Intersecting geometry, such as an invalid draft.
+            if(min >= -eps && max <= eps)continue; // Coplanar faces.
+            const [behind,front]=max>eps?[b,a]:[a,b];
+            behind.next.push(front);
+            front.incoming++;
+        }
+    }
+    // Keep the old order as a tie-breaker, while drawing occluded faces first.
+    const pending=nodes.sort((a,b)=>a.face.depth-b.face.depth);
+    const ordered=[];
+    while(pending.length){
+        const first=pending.findIndex(node=>node.incoming===0);
+        const [node]=pending.splice(Math.max(0,first),1);
+        ordered.push(node.face);
+        for(const next of node.next)next.incoming--;
+    }
+    return ordered;
+}
 function draw(target,p,isFlat,angle=-.65,elevation=.56,frameHeight=p.height, floorMargin=0){
     const ctx=target.getContext('2d'),w=target.width,h=target.height;
     const bg=ctx.createRadialGradient(w*.52,h*.75,15,w*.52,h*.60,w*.69);
@@ -1838,11 +1901,11 @@ function draw(target,p,isFlat,angle=-.65,elevation=.56,frameHeight=p.height, flo
         for(const x of [0,p.l*.43,p.l*.86])block(x,0,0,p.l*.14,p.p,base*.65,['#cc9962','#694022','#8a562e']);
         block(0,0,base*.65,p.l,p.p,base*.35,['#d3a16b','#83502a','#a06b3f']);
         ctx.lineWidth=1;
-        for(const f of faces.sort((a,b)=>a.depth-b.depth))path(f.points,f.color,'#492b14');
+        for(const f of orderVisibleFaces(faces))path(f.points,f.color,'#492b14');
         faces.length=0;
         for(const b of p.boxes)block(b.x,b.y,b.z+base,b.l,b.p,b.h,articleColors(b),b.assemblySelected,b.assemblyInvalid);
         for(const b of p.floorBoxes||[])block(b.x,b.y,0,b.l,b.p,b.h,articleColors(b),b.assemblySelected,b.assemblyInvalid);
-        for(const f of faces.sort((a,b)=>a.depth-b.depth))path(f.points,f.color,f.invalid?'#ff6680':f.selected?'#fff4bc':'#492b14');
+        for(const f of orderVisibleFaces(faces))path(f.points,f.color,f.invalid?'#ff6680':f.selected?'#fff4bc':'#492b14');
     }
     ctx.fillStyle='#edf5ff';ctx.font='bold 24px system-ui';ctx.textAlign='center';
     ctx.fillText(p.l+' × '+p.p+' cm · H '+p.height+' cm',w/2,h-18);
@@ -2022,7 +2085,12 @@ function drawManual3D(p,level){
         const sideX=Math.sin(manualAngle)>=0?[1,2,6,5]:[0,3,7,4];
         const sideY=Math.cos(manualAngle)>=0?[3,2,6,7]:[0,1,5,4];
         for(const [i,corners] of [[0,[4,5,6,7]],[1,sideX],[2,sideY]]){
-            const depth=corners.reduce((sum,k)=>sum+(Math.sin(manualAngle)*coords[k][0]+Math.cos(manualAngle)*coords[k][1])*Math.cos(manualPitch)+coords[k][2]*Math.sin(manualPitch),0)/4;
+            const points=corners.map(k=>{
+                const [x,y,z]=coords[k];
+                const depth=(Math.sin(manualAngle)*x+Math.cos(manualAngle)*y)*Math.cos(manualPitch)+z*Math.sin(manualPitch);
+                return [...vertex[k],depth];
+            });
+            const depth=points.reduce((sum,p)=>sum+p[2],0)/points.length;
             const shape=svgShape('polygon',{points:corners.map(k=>vertex[k].join(',')).join(' '),fill:colors[i],stroke:index===manualIndex?'#fff':'#0a1625','stroke-width':index===manualIndex?.7:.35});
             if(index>=0){
                 shape.setAttribute('data-box',index);
@@ -2031,7 +2099,7 @@ function drawManual3D(p,level){
                 shape.setAttribute('aria-label',manualDraft.boxes[index].id||'Collo');
                 if(manualDrag&&index===manualIndex)shape.setAttribute('opacity','.7');
             }
-            faces.push({depth,shape});
+            faces.push({points,depth,shape});
             if(overlap&&index===manualIndex){
                 conflictOutline.push(svgShape('polygon',{
                     points:shape.getAttribute('points'),fill:'none',stroke:'#fda4af',
@@ -2041,7 +2109,7 @@ function drawManual3D(p,level){
         }
     }
     const appendFaces=()=>{
-        for(const {shape} of faces.sort((a,b)=>a.depth-b.depth))manualSvg.append(shape);
+        for(const {shape} of orderVisibleFaces(faces))manualSvg.append(shape);
         faces.length=0;
     };
     addBox({x:0,y:0,z:0,l:p.l,p:p.p,h:base},['#bf8d59','#79502c','#976239'],-2);
