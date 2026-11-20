@@ -810,7 +810,7 @@ function sharedEdge(a,b){
         Math.min(a.x+a.l,b.x+b.l)-Math.max(a.x,b.x),
         Math.min(a.y+a.p,b.y+b.p)-Math.max(a.y,b.y));
 }
-function upperPosition(p,b,height,preferHigher=false,target=null){
+function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
     const surfaces=new Map();
     const first = !target && p.preferAlignedLevels && b.kind !== p.compactKind
         ? p.boxes.find(box=>box.kind===b.kind) : null;
@@ -852,6 +852,10 @@ function upperPosition(p,b,height,preferHigher=false,target=null){
             };
             const xs=new Set([...contactFaces.flatMap(box=>anchors(box,'x','l',l)), ...occupied.flatMap(box=>[box.x-l,box.x+box.l,box.x,box.x+box.l-l])]);
             const ys=new Set([...contactFaces.flatMap(box=>anchors(box,'y','p',d)), ...occupied.flatMap(box=>[box.y-d,box.y+box.p,box.y,box.y+box.p-d])]);
+            if(compact)for(const hole of openings){
+                xs.add(hole.x+(hole.l-l)/2);
+                ys.add(hole.y+(hole.p-d)/2);
+            }
             const xOrder=p.compactKind!==undefined && b.kind!==p.compactKind
                 ? [...xs].sort((a,b)=>b-a) : xs;
             for(const x of xOrder) for(const y of ys){
@@ -1138,6 +1142,21 @@ function fillExposedTop(p,height){
         }
     }
 }
+function lowerTopBoxes(pallet){
+    const originalHeight=pallet.height-base;
+    const donors=pallet.boxes.filter(box=>box.z>0&&Math.abs(box.z+box.h-originalHeight)<1e-8);
+    for(const box of donors){
+        const remaining=pallet.boxes.filter(other=>other!==box);
+        if(!connectedAfterRemoval(box,remaining))continue;
+        // At this stage a change of layer alignment is allowed if the box can sit lower.
+        const trial={...pallet,boxes:remaining,preferAlignedLevels:false};
+        const spot=upperPosition(trial,box,base+box.z+box.h-1e-7,false,null,true);
+        if(!spot||spot.z>=box.z||
+            loadingInversions({...trial,boxes:[...remaining,{...box,...spot}]})>loadingInversions(pallet)+1e-8)continue;
+        Object.assign(box,spot);
+    }
+    pallet.height=base+Math.max(...pallet.boxes.map(box=>box.z+box.h));
+}
 function planOrder(items,dims,height,balanced,allowFlatBase=false){
     const upright=buildPlan(items,dims,height,balanced,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,balanced,true,allowFlatBase):null;
@@ -1146,7 +1165,10 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
         const layered=buildPlan(items,dims,height,balanced,false,true,true);
         if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
     }
-    if(plan)plan.forEach(centerLoad);
+    if(plan)for(const pallet of plan){
+        if(allowFlatBase)lowerTopBoxes(pallet);
+        centerLoad(pallet);
+    }
     return plan;
 }
 function centerLoad(pallet){
