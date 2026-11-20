@@ -121,6 +121,12 @@ html,body{background:#fff}
 #projectMessage{width:100%;margin:0}
 #projectMessage:empty{display:none}
 .project-dialog{background:#101f33;color:white;border:1px solid #516381;border-radius:14px;width:min(440px,92vw)}
+#heavyReviewDialog{width:min(580px,92vw);padding:16px}
+#heavyReviewDialog canvas{display:block;width:100%;height:auto;border-radius:8px;margin-top:8px}
+#heavyReviewChoices{display:flex;flex-wrap:wrap;gap:4px}
+#heavyReviewChoices button[aria-pressed="true"]{background:#86601b}
+#heavyReviewDialog select{background:#081325;color:white;padding:6px;border-radius:6px}
+#heavyReviewSummary{margin:8px 0}
 .project-dialog::backdrop{background:#030917bb}
 .project-dialog input{display:block;width:100%;margin:8px 0;background:#081325;color:white;border:1px solid #527297;border-radius:6px;padding:8px}
 .project-dialog button{background:#25476b;color:white;border-radius:7px;padding:8px 10px;margin:4px 3px 4px 0}
@@ -201,6 +207,20 @@ html,body{background:#fff}
 <footer class="assembly-footer"><button type="button" id="assemblySaveProject">Salva progetto</button><button type="button" id="assemblyAdd" disabled>Aggiungi al progetto</button></footer>
 <section id="assemblyReview" hidden aria-label="Verifica disposizione"><div><h3>Verifica della pedana</h3><ul id="assemblyWarnings"></ul>
 <div class="assembly-tools"><button type="button" id="assemblyConfirm">Conferma la disposizione</button><button type="button" id="assemblyRestart">Riposiziona carico</button></div></div></section>
+</dialog>
+<dialog id="heavyReviewDialog" class="project-dialog" aria-labelledby="heavyReviewTitle">
+<h2 id="heavyReviewTitle">Colli pesanti sui piani superiori</h2>
+<p id="heavyReviewSummary"></p>
+<p>Il piano con più pedane tiene i colli pesanti più in basso.</p>
+<div id="heavyReviewChoices" role="group" aria-label="Piani disponibili">
+<button id="reviewCompact" type="button" aria-pressed="true"></button>
+<button id="reviewLower" type="button" aria-pressed="false"></button>
+</div>
+<label for="reviewPallet">Pedana da vedere</label>
+<select id="reviewPallet"></select>
+<canvas id="reviewCanvas" width="520" height="300" aria-label="Anteprima della pedana selezionata"></canvas>
+<button id="reviewConfirm" type="button">Conferma piano selezionato</button>
+<form method="dialog" style="display:inline"><button>Annulla</button></form>
 </dialog>
 <dialog id="projectSaveDialog" class="project-dialog">
 <form id="projectNameForm">
@@ -1194,6 +1214,21 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
         }
     }
     else if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
+    if(allowSmallFace&&groups.size>1){
+        for(const {box,count} of groups.values()){
+            if(count<2||box.weight>=8)continue;
+            const own=items.filter(item=>boxFormat(item)===boxFormat(box));
+            const other=items.filter(item=>boxFormat(item)!==boxFormat(box));
+            for(const {p,remaining} of mixedOrientationCandidates(dim,own,height)){
+                p.free=[];
+                p.flatBase=true;
+                const unplaced=other.filter(item=>!placeBox(p,item,height,weightLimit,Infinity));
+                if(unplaced.length===other.length)continue;
+                p.mixedOrientationBase=true;
+                candidates.push({p,remaining:[...remaining,...unplaced],uneven:unevenLayers(p)});
+            }
+        }
+    }
     if(layered&&groups.size>1)candidates.push(...layeredCandidates(dim,items,groups,height,allowSmallFace));
     return candidates;
 }
@@ -1280,6 +1315,8 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
         const layered=buildPlan(items,dims,height,balanced,false,true,true);
         if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
     }
+    if(alternative&&plan&&alternative.length===plan.length&&alternative.some(p=>p.mixedOrientationBase)&&
+        totalPalletArea(alternative)<totalPalletArea(plan))plan=alternative;
     const kindsByFormat=new Map();
     for(const box of items){
         if(!kindsByFormat.has(box.format))kindsByFormat.set(box.format,new Set());
@@ -1349,11 +1386,13 @@ function baseLayerDeficit(plan){
     }
     return deficit;
 }
+function totalPalletArea(plan){
+    return plan.reduce((sum,p)=>sum+p.l*p.p,0);
+}
 function compareShipments(a,b){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
-    const area=plan=>plan.reduce((sum,p)=>sum+p.l*p.p,0);
     const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
-    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
+    return a.length-b.length||inversions(a)-inversions(b)||totalPalletArea(a)-totalPalletArea(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
 }
 function articleMix(p){
     const formats=new Map();
@@ -1364,11 +1403,16 @@ function articleMix(p){
     }
     return [...formats.values()].reduce((sum,kinds)=>sum+kinds.size-1,0);
 }
-function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false,keepArticles=false){
+function heavyUpperBoxes(pallet){
+    return pallet.boxes.filter(box=>box.z>0&&pallet.boxes.some(support=>
+        support.kind!==box.kind&&support.weight<box.weight&&
+        Math.abs(support.z+support.h-box.z)<1e-8&&overlapArea(support,box)>1e-8));
+}
+function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false,keepArticles=false,keepHeavyLow=false){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const out=[];
     while(pending.length){
-        const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase,layered)).filter(c=>c.p.boxes.length);
+        const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase,layered)).filter(c=>c.p.boxes.length&&(!keepHeavyLow||!heavyUpperBoxes(c.p).length));
         if(allowFlatBase)for(const candidate of candidates)candidate.inversions=loadingInversions(candidate.p);
         if(layered)for(const candidate of candidates){
             candidate.leadingCount=candidate.p.boxes.filter(box=>boxFormat(box)===boxFormat(pending[0])).length;
@@ -1378,7 +1422,7 @@ function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layer
             Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
         if(!candidates.length)return null;
         const {p,remaining}=candidates[0];
-        fillExposedTop(p,height);
+        if(!keepHeavyLow)fillExposedTop(p,height);
         out.push(p);pending.length=0;
         pending.push(...remaining);
         if(layered)pending.sort((a,b)=>b.l*b.p-a.l*a.p||b.weight-a.weight||b.h-a.h);
@@ -1426,10 +1470,63 @@ function calculateOrder(selected=0){
         !Number.isInteger(b.maxLayers)||b.maxLayers<1||b.weight+tare>weightLimit||![b,smallestFace(b)].some(shape=>shape&&shape.h+base<=height&&dims.some(([l,p])=>fits(shape,l,p))));
     if(invalid){alert('Il prodotto '+invalid.id+' non rientra nei limiti o ha dati incompleti.');return;}
     const items=remaining.flatMap(b=>Array.from({length:b.qty},()=>({...b})));
-    const planned=planOrder(items,dims,height,mode==='balanced',mode==='auto');
+    let planned=planOrder(items,dims,height,mode==='balanced',mode==='auto');
     if(!planned){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
+    if(mode==='auto'&&planned.some(p=>heavyUpperBoxes(p).length)){
+        const lower=planWithHeavyLow(items,dims,height);
+        if(lower&&lower.length<=planned.length)planned=lower;
+        else if(lower){
+            openHeavyReview(planned,lower,height,selected);
+            return;
+        }
+    }
     for(const pallet of planned)pallet.maxHeight=height;
     publishProject([...composedPallets,...planned],selected);
+}
+function planWithHeavyLow(items,dims,height){
+    const normalized=items.map(box=>({...box,format:boxFormat(box)}));
+    const allowSide=items.some(smallestFace);
+    const plan=buildPlan(normalized,dims,height,false,allowSide,true,false,false,true)||
+        buildPlan(normalized,dims,height,false,allowSide,false,false,false,true);
+    if(plan)for(const pallet of plan)centerLoad(pallet);
+    return plan;
+}
+function openHeavyReview(compact,lower,height,selected){
+    const dialog=el('heavyReviewDialog');
+    const plans=[compact,lower].map(plan=>{
+        for(const pallet of plan)pallet.maxHeight=height;
+        return [...composedPallets,...plan];
+    });
+    const summary=compact.flatMap((p,index)=>{
+        const boxes=heavyUpperBoxes(p);
+        if(!boxes.length)return [];
+        const number=composedPallets.length+index+1;
+        return ['Pedana '+number+' — '+boxes.length+' colli in alto, '+boxes.reduce((sum,box)=>sum+box.weight,0).toLocaleString('it-IT')+' kg complessivi'];
+    });
+    el('heavyReviewSummary').textContent=summary.join(' · ');
+    const buttons=[el('reviewCompact'),el('reviewLower')];
+    const select=el('reviewPallet');
+    let choice=0;
+    const preview=()=>draw(el('reviewCanvas'),plans[choice][Number(select.value)],false);
+    function choose(index){
+        choice=index;
+        buttons.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===index)));
+        select.replaceChildren(...plans[index].map((p,i)=>
+            new Option('Pedana '+(i+1)+' · '+p.l+' × '+p.p+' cm · H '+p.height+' cm',String(i))));
+        const affected=compact.findIndex(p=>heavyUpperBoxes(p).length);
+        select.selectedIndex=index===0?composedPallets.length+affected:composedPallets.length;
+        preview();
+    }
+    buttons[0].textContent='Vedi piano da '+plans[0].length+' pedane';
+    buttons[1].textContent='Vedi piano da '+plans[1].length+' pedane';
+    buttons.forEach((button,i)=>button.onclick=()=>choose(i));
+    select.onchange=preview;
+    el('reviewConfirm').onclick=()=>{
+        dialog.close();
+        publishProject(plans[choice],Math.min(selected,plans[choice].length-1));
+    };
+    dialog.showModal();
+    choose(0);
 }
 function publishProject(project, selected=0){
     pallets=project;
