@@ -211,8 +211,176 @@ html,body{background:#fff}
     :is(button, input, select, summary):focus-visible { outline: 2px solid #267bce; outline-offset: 2px; }
 }
 </style>
+<style data-relief-theme>
+@media screen {
+    :root {
+        --surface: #eef4fb;
+        --field: #ffffff;
+        --ink: #10253d;
+        --muted: #3c526b;
+        --surface-line: #9cb1c7;
+        --control: #142c46;
+        --control-edge: #395975;
+        --accent: #007d94;
+    }
+
+    html, body {
+        background: radial-gradient(ellipse at 72% 0%, #19344c 0%, #091522 58%);
+        background-attachment: fixed;
+    }
+    body { font-family: "Geist", system-ui, sans-serif; }
+    .top {
+        background: #0c1c2d;
+        border-bottom: 1px solid #40627d;
+        box-shadow: 0 8px 24px #03091150;
+    }
+    .brand svg path:first-child { fill: #6de5f5; }
+    .brand h1 b { background: #6de5f5; color: #0b253b; }
+    .brand p { color: #c3d5e8; }
+
+    .dashboard { gap: 14px; }
+    .dashboard .panel:not(.viewer) {
+        border-radius: 12px;
+        border-top: 2px solid var(--accent);
+        box-shadow: 0 8px 20px #03091130;
+    }
+    .commessa label, .form-grid label { color: var(--ink); }
+    .dashboard input { border-radius: 7px; }
+    .controls section h2 { border-bottom-color: #a7b8cd; }
+    .controls h2 i { background: #d0f0f5; color: #123c50; }
+    .dashboard :is(button, select), nav button { border-radius: 8px; }
+    .dashboard button.gold, nav button.gold,
+    #productDialog #selectedArticlePanel .gold, #productDialog #accessoryForm .gold,
+    #manualDialog button[aria-pressed="true"], #heavyReviewChoices button[aria-pressed="true"],
+    #productDialog #articlesSelectionGrid button[aria-pressed="true"] {
+        background: #163d55;
+        color: #e7fcff;
+        border-color: #52d3e6;
+        box-shadow: inset 0 0 0 1px #52d3e6;
+    }
+    #formats .gold svg, #productDialog #accessoryToggle { color: #8beafa; }
+    .dashboard .action button { background: #064557; border-color: #08788b; }
+    #viewSwitch { background: #0b2033; border: 1px solid #395975; }
+    #viewSwitch button { min-width: 42px; }
+
+    .dashboard .viewer { border-color: #58758d; border-radius: 12px; }
+    #viewFooter {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        gap: 10px;
+        padding: 14px;
+        border-top: 1px solid var(--surface-line);
+        text-align: center;
+    }
+    #viewFooter #palletPosition { overflow-wrap: anywhere; }
+    #viewFooter :is(#palletVolume, #showDetails, #editPallet) { grid-column: 1 / -1; }
+    #palletVolume, .shipment-volume strong { color: #13506a; }
+    #viewFooter #showDetails:not(:disabled) { color: #f6f8ff !important; }
+    #viewFooter :is(#prevPallet, #nextPallet) { min-width: 44px; font-size: 1.2rem; }
+    #viewFooter button:disabled,
+    #viewFooter #showDetails:disabled,
+    .dashboard #formats button:disabled {
+        opacity: 1;
+        color: #344a62 !important;
+        background: #dbe5f0;
+        border-color: #a5b7ca;
+        box-shadow: none;
+        cursor: default;
+        filter: none;
+    }
+    .dashboard #formats button:disabled svg { color: #41566e; }
+    .stats strong, #palletVolume, .shipment-volume strong {
+        font-family: "IBM Plex Mono", ui-monospace, monospace;
+        font-variant-numeric: tabular-nums;
+    }
+    :is(button, input, select, summary):focus-visible { outline-color: #008297; }
+
+    @media (max-width: 720px) {
+        .dashboard { gap: 10px; }
+        #viewFooter { padding: 12px; }
+    }
+}
+</style>
+<style data-relief-theme>
+@media screen {
+    :root {
+        --pearl: linear-gradient(156deg, #ffffff 0%, #f7fbff 38%, #e2ecf7 100%);
+        --recess: linear-gradient(180deg, #edf4fb, #ffffff 72%);
+        --keycap: linear-gradient(180deg, #344e68 0%, #243e59 42%, #142b43 100%);
+        --key-shadow: inset 0 1px 0 #c8edff56, 0 3px 0 #0b1d30, 0 5px 8px #10283932;
+    }
+    .dashboard .panel:not(.viewer),
+    #viewFooter, #viewerLayers, #articleLegend,
+    #productDialog, #manualDialog, #detailDialog, .project-dialog,
+    #catalogModal > div, .assembly-header, .assembly-footer, .assembly-body aside, #assemblyReview > div {
+        background: var(--pearl);
+        box-shadow: inset 0 1px 0 #fff, 0 7px 20px #03091132;
+    }
+    .dashboard input, #productDialog input, #manualDialog select,
+    .project-dialog input, #heavyReviewDialog select,
+    #catalogModalBody input, #composeDialog input, #composeDialog select {
+        background: var(--recess);
+        box-shadow: inset 0 2px 4px #29496724, 0 1px 0 #fff;
+    }
+
+    nav button, .dashboard button, #productDialog button, #manualDialog button,
+    #detailDialog form button, .project-dialog button, #catalogModal button, #composeDialog button {
+        background: var(--keycap);
+        box-shadow: var(--key-shadow);
+    }
+    .dashboard button.gold, nav button.gold,
+    #productDialog #selectedArticlePanel .gold, #productDialog #accessoryForm .gold,
+    #manualDialog button[aria-pressed="true"], #heavyReviewChoices button[aria-pressed="true"],
+    #productDialog #articlesSelectionGrid button[aria-pressed="true"] {
+        background: linear-gradient(#305b70, #15384e);
+        box-shadow: inset 0 0 0 1px #52d3e6, var(--key-shadow);
+    }
+    .dashboard .action button, #composeDialog #assemblyAdd {
+        background: linear-gradient(#176a78, #06434e);
+        box-shadow: inset 0 1px 0 #a2f5fb72, 0 3px 0 #052934, 0 6px 12px #08384545;
+    }
+    #viewFooter button:disabled, #viewFooter #showDetails:disabled,
+    .dashboard #formats button:disabled {
+        background: linear-gradient(#e7eff7, #d9e4ef);
+        color: #344a62 !important;
+        opacity: 1;
+        box-shadow: inset 0 1px 0 #fff;
+    }
+    :is(.dashboard, nav, dialog, #catalogModal) button:not(:disabled):active {
+        transform: translateY(2px);
+        box-shadow: inset 0 2px 4px #07111d55, 0 1px 0 #0b1d30;
+    }
+    #viewFooter, .project-actions, .article-actions, .seg, #formats { row-gap: 12px; }
+}
+</style>
+<style>
+.theme-choice{display:flex;align-items:center;gap:6px;color:#e1ebf7;font-size:.85rem}
+.theme-choice select{color:#f5f8ff;background:#162e48;border:1px solid #617c99;border-radius:8px;padding:8px 10px;font:inherit}
+</style>
+<script>
+(() => {
+    const key = 'po_visual_theme';
+    let theme = 'relief';
+    try {
+        if (localStorage.getItem(key) === 'previous') theme = 'previous';
+    } catch {}
+    const styles = document.querySelectorAll('[data-relief-theme]');
+    function applyTheme(value) {
+        for (const style of styles) style.media = value === 'relief' ? 'screen' : 'not all';
+    }
+    applyTheme(theme);
+    document.addEventListener('DOMContentLoaded', () => {
+        const picker = document.getElementById('themeChoice');
+        picker.value = theme;
+        picker.addEventListener('change', () => {
+            applyTheme(picker.value);
+            try { localStorage.setItem(key, picker.value); } catch {}
+        });
+    });
+})();
+</script>
 </head><body>
-<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button></nav></header>
+<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Precedente</option></select></label></nav></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
 <div class="controls">
