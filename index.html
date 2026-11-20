@@ -975,6 +975,28 @@ function flatBaseCandidates(dim,items,groups,height){
     }
     return result;
 }
+function uniformGridCandidates(dim,items,height){
+    const box=items[0];
+    const layers=Math.min(box.maxLayers,Math.floor((height-base)/box.h+1e-9));
+    const weightCapacity=Math.floor((weightLimit-tare)/box.weight);
+    const orientations=box.l===box.p?[[box.l,box.p]]:[[box.l,box.p],[box.p,box.l]];
+    return orientations.flatMap(([l,p])=>{
+        const cols=Math.floor(dim[0]/l+1e-9), rows=Math.floor(dim[1]/p+1e-9);
+        const perLayer=cols*rows;
+        const count=Math.min(items.length,perLayer*layers,weightCapacity);
+        if(count<1)return [];
+        const pallet=emptyPallet(dim);
+        const x=(dim[0]-cols*l)/2,y=(dim[1]-rows*p)/2;
+        for(let i=0;i<count;i++){
+            const slot=i%perLayer;
+            pallet.boxes.push({...items[i],l,p,x:x+(slot%cols)*l,y:y+Math.floor(slot/cols)*p,z:Math.floor(i/perLayer)*box.h});
+        }
+        pallet.weight=tare+count*box.weight;
+        pallet.volume=count*box.l*box.p*box.h;
+        pallet.height=base+Math.ceil(count/perLayer)*box.h;
+        return [{p:pallet,remaining:items.slice(count),uneven:0}];
+    });
+}
 function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBase=false){
     const layouts = [emptyPallet(dim)];
     const groups = new Map();
@@ -1008,7 +1030,8 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
         const remaining = aboveFloor.filter(box => !put(p, box, height, weightLimit, Infinity, false, box.kind===p.compactKind));
         return {p, remaining, uneven: unevenLayers(p)};
     });
-    if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
+    if(groups.size===1)candidates.push(...uniformGridCandidates(dim,items,height));
+    else if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
     return candidates;
 }
 function unevenLayers(p){
@@ -1108,8 +1131,9 @@ function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase){
     while(pending.length){
         const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase)).filter(c=>c.p.boxes.length);
         if(allowFlatBase)for(const candidate of candidates)candidate.inversions=loadingInversions(candidate.p);
-        candidates.sort((a,b)=>b.p.volume-a.p.volume||b.p.boxes.length-a.p.boxes.length||
-            (a.inversions??0)-(b.inversions??0)||a.p.l*a.p.p-b.p.l*b.p.p||Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
+        candidates.sort((a,b)=>b.p.boxes.length-a.p.boxes.length||
+            a.p.l*a.p.p-b.p.l*b.p.p||b.p.volume-a.p.volume||(a.inversions??0)-(b.inversions??0)||
+            Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
         if(!candidates.length)return null;
         const {p,remaining}=candidates[0];
         fillExposedTop(p,height);
