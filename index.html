@@ -98,6 +98,8 @@ html,body{background:#fff}
 #productDialog #articlesSelectionGrid button{text-align:left;min-width:0;overflow-wrap:anywhere}
 #productDialog #articlesSelectionGrid button[aria-pressed=true]{border-color:#ffc34d}
 #productDialog #selectedArticlePanel .gold{margin-top:8px;background:#ffbd48;color:#142034}
+#accessoryPicker summary{cursor:pointer;color:#ffcf78}
+#accessoryForm input{display:block;width:100%;min-width:0}
 #pickerFeedback:empty{display:none}
 </style><style>
 .manifest-quantity{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
@@ -174,7 +176,7 @@ html,body{background:#fff}
 <dialog id="productDialog" aria-labelledby="productTitle">
 <form method="dialog"><button aria-label="Chiudi selezione articoli">✕</button></form>
 <h2 id="productTitle">Aggiungi prodotto</h2>
-<div id="picker" class="space-y-3"><input id="catalogSearch" oninput="filterCatalog()" placeholder="Cerca un articolo"><p id="pickerFeedback" role="status"></p><div id="articlesSelectionGrid" class="grid grid-cols-2 gap-2"></div><div id="selectedArticlePanel" class="hidden space-y-2"><div id="selArtName"></div><label for="selArtQty">Quantità</label><div class="quantity-control"><button type="button" aria-label="Diminuisci quantità di uno" onclick="adjustQty(-1)">↓</button><input id="selArtQty" type="number" inputmode="numeric" min="1" step="1" value="1"><button type="button" aria-label="Aumenta quantità di uno" onclick="adjustQty(1)">↑</button></div><button class="gold" onclick="addToManifest()">Inserisci in distinta</button></div></div>
+<div id="picker" class="space-y-3"><details id="accessoryPicker"><summary>Scatola accessori</summary><form id="accessoryForm" onsubmit="addAccessory(event)" class="space-y-2"><div class="grid grid-cols-2 gap-2"><label>Lunghezza (cm)<input name="l" type="number" min="0.01" step="any" required ></label><label>Larghezza (cm)<input name="p" type="number" min="0.01" step="any" required ></label><label>Altezza (cm)<input name="h" type="number" min="0.01" step="any" required ></label><label>Peso per collo (kg)<input name="weight" type="number" min="0.01" step="any" required ></label><label>Quantità<input name="qty" type="number" min="1" step="1" required value="1" ></label><label>Max piani (facoltativo)<input name="maxLayers" type="number" min="1" step="1" ></label></div><button type="submit" class="gold">Inserisci scatola accessori</button></form></details><input id="catalogSearch" oninput="filterCatalog()" placeholder="Cerca un articolo"><p id="pickerFeedback" role="status"></p><div id="articlesSelectionGrid" class="grid grid-cols-2 gap-2"></div><div id="selectedArticlePanel" class="hidden space-y-2"><div id="selArtName"></div><label for="selArtQty">Quantità</label><div class="quantity-control"><button type="button" aria-label="Diminuisci quantità di uno" onclick="adjustQty(-1)">↓</button><input id="selArtQty" type="number" inputmode="numeric" min="1" step="1" value="1"><button type="button" aria-label="Aumenta quantità di uno" onclick="adjustQty(1)">↑</button></div><button class="gold" onclick="addToManifest()">Inserisci in distinta</button></div></div>
 </dialog>
 <dialog id="composeDialog" aria-labelledby="assembleTitle">
 <header class="assembly-header"><h2 id="assembleTitle">Disposizione manuale</h2><button type="button" id="assemblyClose" aria-label="Chiudi disposizione manuale">✕</button></header>
@@ -273,6 +275,8 @@ html,body{background:#fff}
         });
 
         function openProductPicker() {
+            document.getElementById('accessoryForm').reset();
+            document.getElementById('accessoryPicker').open = false;
             document.getElementById('catalogSearch').value = '';
             document.getElementById('pickerFeedback').textContent = '';
             document.getElementById('selectedArticlePanel').classList.add('hidden');
@@ -349,6 +353,22 @@ html,body{background:#fff}
             addManifestQuantity(art, qty);
             document.getElementById('pickerFeedback').textContent = qty + ' × ' + art.id + ' aggiunti alla distinta.';
             document.getElementById('selArtQty').value = 1;
+        }
+        function addAccessory(event) {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const value = name => form.elements.namedItem(name).valueAsNumber;
+            const qty = value('qty');
+            const maxLayers = value('maxLayers') || 2000;
+            const [l, p, h, weight] = ['l', 'p', 'h', 'weight'].map(value);
+            if (![l, p, h, weight].every(n => Number.isFinite(n) && n > 0) ||
+                ![qty, maxLayers].every(n => Number.isSafeInteger(n) && n > 0)) return;
+            let number = 1;
+            let id = 'ACCESSORI-' + number;
+            while ([...catalog, ...manifest].some(row => row.id === id)) id = 'ACCESSORI-' + ++number;
+            addManifestQuantity({id, name: 'Scatola accessori', l, p, h, weight, maxLayers}, qty);
+            document.getElementById('pickerFeedback').textContent = qty + ' × ' + id + ' aggiunti alla distinta.';
+            form.reset();
         }
         function addManifestQuantity(art, qty) {
             const existing = manifest.find(item => item.id === art.id);
@@ -810,10 +830,17 @@ function sharedEdge(a,b){
         Math.min(a.x+a.l,b.x+b.l)-Math.max(a.x,b.x),
         Math.min(a.y+a.p,b.y+b.p)-Math.max(a.y,b.y));
 }
+function boxFormat(box){
+    return box.format ?? [Math.min(box.l,box.p),Math.max(box.l,box.p),box.h].join('×');
+}
+function canUseLayer(p,box,z){
+    const levels=new Set(p.boxes.filter(other=>other.kind===box.kind).map(other=>other.z));
+    return levels.has(z)||levels.size<box.maxLayers;
+}
 function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
     const surfaces=new Map();
-    const first = !target && p.preferAlignedLevels && b.kind !== p.compactKind
-        ? p.boxes.find(box=>box.kind===b.kind) : null;
+    const first = !target && p.preferAlignedLevels && boxFormat(b) !== p.compactKind
+        ? p.boxes.find(box=>boxFormat(box)===boxFormat(b)) : null;
     for(const box of p.boxes){
         const z=box.z+box.h;
         if(target && box!==target) continue;
@@ -829,12 +856,13 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
         const occupied=p.boxes.filter(box=>box.z<z+b.h&&box.z+box.h>z);
         const available=spot=>{
             if(occupied.some(box=>overlapArea(spot,box)>0)) return false;
-            const stack=new Set(p.boxes.filter(box=>box.kind===b.kind&&box.z<z&&overlapArea(spot,box)>0).map(box=>box.z));
-            return stack.size<b.maxLayers && joinsLoad({...spot,h:b.h},occupied);
+            if(p.boxes.some(box=>box.z<z&&boxFormat(box)===boxFormat(b)&&
+                box.weight<b.weight&&overlapArea(spot,box)>0))return false;
+            return canUseLayer(p,b,z) && joinsLoad({...spot,h:b.h},occupied);
         };
         if (p.columns.length) {
             for (const box of supports) {
-                if (box.kind!==b.kind || Boolean(box.smallFace)!==Boolean(b.smallFace)) continue;
+                if (boxFormat(box)!==boxFormat(b) || Boolean(box.smallFace)!==Boolean(b.smallFace)) continue;
                 const spot={x:box.x,y:box.y,z,l:box.l,p:box.p};
                 if (available(spot)) return spot;
             }
@@ -856,7 +884,7 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
                 xs.add(hole.x+(hole.l-l)/2);
                 ys.add(hole.y+(hole.p-d)/2);
             }
-            const xOrder=p.compactKind!==undefined && b.kind!==p.compactKind
+            const xOrder=p.compactKind!==undefined && boxFormat(b)!==p.compactKind
                 ? [...xs].sort((a,b)=>b-a) : xs;
             for(const x of xOrder) for(const y of ys){
                 if(x<0||y<0||x+l>p.l||y+d>p.p) continue;
@@ -893,7 +921,7 @@ function placeBox(p,b,height,weightTarget,volumeTarget,floorOnly=false,preferHig
     if(base+b.h>height)return false;
     const volume=b.l*b.p*b.h;
     if(p.weight+b.weight>Math.min(weightLimit,weightTarget+1e-8)||p.volume+volume>volumeTarget+1e-8)return false;
-    const columns=p.columns.filter(c=>c.kind===b.kind&&!b.smallFace&&c.count===0&&joinsLoad({...c,h:b.h},p.boxes));
+    const columns=p.columns.filter(c=>c.format===boxFormat(b)&&canUseLayer(p,b,c.z)&&!b.smallFace&&c.count===0&&joinsLoad({...c,h:b.h},p.boxes));
     columns.sort((a,b)=>a.z-b.z);
     let spot;
     if(columns.length){
@@ -902,7 +930,7 @@ function placeBox(p,b,height,weightTarget,volumeTarget,floorOnly=false,preferHig
         c.z+=b.h;
         c.count++;
     } else {
-        const choices=p.free.flatMap((r,index)=>[[b.l,b.p],[b.p,b.l]].filter(([l,d])=>l<=r.l&&d<=r.p&&joinsLoad({x:r.x,y:r.y,z:0,l,p:d,h:b.h},p.boxes))
+        const choices=p.free.flatMap((r,index)=>[[b.l,b.p],[b.p,b.l]].filter(([l,d])=>l<=r.l&&d<=r.p&&canUseLayer(p,b,0)&&joinsLoad({x:r.x,y:r.y,z:0,l,p:d,h:b.h},p.boxes))
             .map(([l,d])=>({r,index,l,d,score:r.l*r.p-l*d,short:Math.min(r.l-l,r.p-d)})));
         choices.sort((a,b)=>a.score-b.score||a.short-b.short);
         if(choices.length){
@@ -936,7 +964,7 @@ function pinwheelPallet(dim, box){
         [long, 0, short, long],
         [short, long, long, short],
         [0, short, short, long],
-    ].map(([dx, dy, l, p]) => ({x:x+dx, y:y+dy, l, p, z:0, count:0, kind:box.kind}));
+    ].map(([dx, dy, l, p]) => ({x:x+dx, y:y+dy, l, p, z:0, count:0, format:boxFormat(box)}));
     // The opening in the middle is the only unoccupied part of the pattern.
     pallet.free = [{x:x+short, y:y+short, l:long-short, p:long-short}];
     return pallet;
@@ -947,7 +975,7 @@ function pairedBase(dim,box,layered=false){
     if(l>=p||long>l||2*short>p)return null;
     const pallet=emptyPallet(dim);
     const x=layered?(l-long)/2:0;
-    pallet.columns=[0,short].map(y=>({x,y,z:0,l:long,p:short,count:0,kind:box.kind}));
+    pallet.columns=[0,short].map(y=>({x,y,z:0,l:long,p:short,count:0,format:boxFormat(box)}));
     if(layered){
         pallet.narrowAcross=true;
         pallet.free=[];
@@ -960,79 +988,73 @@ function pairedBase(dim,box,layered=false){
 }
 function flatBaseCandidates(dim,items,groups,height){
     const result=[];
-    for(const {box,count} of groups.values()){
-        const others=items.filter(other=>other.kind!==box.kind);
+    for(const {box} of groups.values()){
+        const own=items.filter(item=>boxFormat(item)===boxFormat(box));
+        const others=items.filter(item=>boxFormat(item)!==boxFormat(box));
         if(!others.length)continue;
         const shapes=box.l===box.p?[[box.l,box.p]]:[[box.l,box.p],[box.p,box.l]];
         for(const [l,p] of shapes){
-            const cols=Math.min(count,Math.floor(dim[0]/l+1e-9));
-            const rows=Math.min(count,Math.floor(dim[1]/p+1e-9));
+            const cols=Math.floor(dim[0]/l+1e-9), rows=Math.floor(dim[1]/p+1e-9);
             const perLayer=cols*rows;
-            if(perLayer<2||perLayer>count)continue;
-            const possible=others.filter(other=>fits(other,cols*l,rows*p));
-            if(!possible.length)continue;
-            const levels=new Set(possible.map(top=>Math.min(box.maxLayers,Math.floor(count/perLayer),
-                Math.floor((height-base-top.h)/box.h+1e-9),
-                Math.floor((weightLimit-tare-top.weight)/(perLayer*box.weight)+1e-9))));
+            if(perLayer<2||perLayer>own.length)continue;
+            const levels=new Set(others.filter(top=>fits(top,cols*l,rows*p)).map(top=>
+                Math.min(Math.floor(own.length/perLayer),Math.floor((height-base-top.h)/box.h+1e-9))));
             for(const layers of levels){
                 if(layers<1)continue;
-                const pallet=emptyPallet(dim);
+                let layout=gridLayout(dim,own,l,p,cols,rows,layers,weightLimit);
+                const completed=Math.floor(layout.p.boxes.length/perLayer);
+                if(!completed)continue;
+                if(layout.p.boxes.length%perLayer)layout=gridLayout(dim,own,l,p,cols,rows,completed,weightLimit);
+                const {p:pallet,remaining}=layout;
                 pallet.flatBase=true;
                 pallet.free=[];
-                const x=(pallet.l-cols*l)/2,y=(pallet.p-rows*p)/2;
-                let filled=0;
-                const remaining=items.filter(item=>{
-                    if(item.kind!==box.kind||filled>=layers*perLayer)return true;
-                    const slot=filled%perLayer;
-                    pallet.boxes.push({...item,l,p,x:x+(slot%cols)*l,y:y+Math.floor(slot/cols)*p,z:Math.floor(filled/perLayer)*box.h});
-                    filled++;
-                    return false;
+                const leftover=others.filter(item=>!put(pallet,item,height,weightLimit,Infinity));
+                if(leftover.length<others.length)result.push({
+                    p:pallet,remaining:[...remaining,...leftover],uneven:unevenLayers(pallet)
                 });
-                pallet.volume=filled*l*p*box.h;
-                pallet.weight=tare+filled*box.weight;
-                pallet.height=base+layers*box.h;
-                let mixed=false;
-                const leftover=remaining.filter(item=>{
-                    if(!put(pallet,item,height,weightLimit,Infinity))return true;
-                    if(item.kind!==box.kind)mixed=true;
-                    return false;
-                });
-                if(mixed)result.push({p:pallet,remaining:leftover,uneven:unevenLayers(pallet)});
             }
         }
     }
     return result;
 }
+function gridLayout(dim,items,l,p,cols,rows,layers,maxWeight){
+    const pallet=emptyPallet(dim);
+    const perLayer=cols*rows;
+    const step=items[0].h;
+    const x=(dim[0]-cols*l)/2,y=(dim[1]-rows*p)/2;
+    const remaining=[];
+    for(const item of items){
+        const index=pallet.boxes.length, slot=index%perLayer;
+        const z=Math.floor(index/perLayer)*step;
+        if(index>=perLayer*layers||pallet.weight+item.weight>maxWeight||!canUseLayer(pallet,item,z)){
+            remaining.push(item);
+            continue;
+        }
+        pallet.boxes.push({...item,l,p,x:x+(slot%cols)*l,y:y+Math.floor(slot/cols)*p,z});
+        pallet.weight+=item.weight;
+        pallet.volume+=l*p*step;
+        pallet.height=base+z+step;
+    }
+    return {p:pallet,remaining,uneven:0};
+}
 function uniformGridCandidates(dim,items,height){
     const box=items[0];
-    const layers=Math.min(box.maxLayers,Math.floor((height-base)/box.h+1e-9));
-    const weightCapacity=Math.floor((weightLimit-tare)/box.weight);
+    const layers=Math.floor((height-base)/box.h+1e-9);
     const orientations=box.l===box.p?[[box.l,box.p]]:[[box.l,box.p],[box.p,box.l]];
     return orientations.flatMap(([l,p])=>{
         const cols=Math.floor(dim[0]/l+1e-9), rows=Math.floor(dim[1]/p+1e-9);
-        const perLayer=cols*rows;
-        const count=Math.min(items.length,perLayer*layers,weightCapacity);
-        if(count<1)return [];
-        const pallet=emptyPallet(dim);
-        const x=(dim[0]-cols*l)/2,y=(dim[1]-rows*p)/2;
-        for(let i=0;i<count;i++){
-            const slot=i%perLayer;
-            pallet.boxes.push({...items[i],l,p,x:x+(slot%cols)*l,y:y+Math.floor(slot/cols)*p,z:Math.floor(i/perLayer)*box.h});
-        }
-        pallet.weight=tare+count*box.weight;
-        pallet.volume=count*box.l*box.p*box.h;
-        pallet.height=base+Math.ceil(count/perLayer)*box.h;
-        return [{p:pallet,remaining:items.slice(count),uneven:0}];
+        if(!cols||!rows||layers<1)return [];
+        return [gridLayout(dim,items,l,p,cols,rows,layers,weightLimit)];
     });
 }
 function layeredCandidates(dim,items,groups,height,allowSmallFace){
     const box=items[0];
-    const own=items.filter(item=>item.kind===box.kind);
-    const other=items.filter(item=>item.kind!==box.kind);
+    const own=items.filter(item=>boxFormat(item)===boxFormat(box));
+    const other=items.filter(item=>boxFormat(item)!==boxFormat(box));
     const smallestArea=Math.min(...other.map(item=>item.l*item.p));
     // Keep intermediate cartons available for a separate base when enough are present.
     const reservedKinds=new Set(groups.size>2?other.filter(item=>
-        item.l*item.p>smallestArea&&groups.get(item.kind).count>=2).map(item=>item.kind):[]);
+        item.l*item.p>smallestArea&&groups.get(boxFormat(item)).count>=2).map(boxFormat):[]);
     const grids=uniformGridCandidates(dim,own,height);
     const floorCount=({p})=>p.boxes.filter(box=>box.z===0).length;
     const widest=Math.max(0,...grids.map(floorCount));
@@ -1046,7 +1068,7 @@ function layeredCandidates(dim,items,groups,height,allowSmallFace){
     }
     return layouts.map(({p,remaining})=>{
         p.allowSmallFace=allowSmallFace;
-        const next=other.filter(item=>reservedKinds.has(item.kind)||!put(p,item,height,weightLimit,Infinity));
+        const next=other.filter(item=>reservedKinds.has(boxFormat(item))||!put(p,item,height,weightLimit,Infinity));
         return {p,remaining:[...remaining,...next],uneven:unevenLayers(p),layeredBase:true};
     });
 }
@@ -1054,9 +1076,9 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
     const layouts = [emptyPallet(dim)];
     const groups = new Map();
     for (const box of items) {
-        const group = groups.get(box.kind);
+        const group = groups.get(boxFormat(box));
         if (group) group.count++;
-        else groups.set(box.kind, {box, count:1});
+        else groups.set(boxFormat(box), {box, count:1});
     }
     for (const {box, count} of groups.values()) {
         if (count >= 2 && items.some(other=>other.l*other.p<box.l*box.p)) {
@@ -1070,7 +1092,7 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
             if (count === 6 && items.some(other=>other.l*other.p<box.l*box.p)) {
                 for (const preferAlignedLevels of [false,true]) {
                     const concentrated=pinwheelPallet(dim,box);
-                    concentrated.compactKind=box.kind;
+                    concentrated.compactKind=boxFormat(box);
                     concentrated.preferAlignedLevels=preferAlignedLevels;
                     layouts.push(concentrated);
                 }
@@ -1080,10 +1102,20 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
     const candidates=layouts.map(p => {
         p.allowSmallFace=allowSmallFace;
         const aboveFloor = items.filter(box => !put(p, box, height, weightLimit, Infinity, true));
-        const remaining = aboveFloor.filter(box => !put(p, box, height, weightLimit, Infinity, false, box.kind===p.compactKind));
+        const remaining = aboveFloor.filter(box => !put(p, box, height, weightLimit, Infinity, false, boxFormat(box)===p.compactKind));
         return {p, remaining, uneven: unevenLayers(p)};
     });
-    if(groups.size===1)candidates.push(...uniformGridCandidates(dim,items,height));
+    if(groups.size===1){
+        candidates.push(...uniformGridCandidates(dim,items,height));
+        for(const kind of new Set(items.map(box=>box.kind))){
+            const own=items.filter(box=>box.kind===kind);
+            if(own.length===items.length)break;
+            const other=items.filter(box=>box.kind!==kind);
+            for(const grid of uniformGridCandidates(dim,own,height)){
+                candidates.push({...grid,remaining:[...grid.remaining,...other]});
+            }
+        }
+    }
     else if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
     if(layered&&groups.size>1)candidates.push(...layeredCandidates(dim,items,groups,height,allowSmallFace));
     return candidates;
@@ -1126,7 +1158,7 @@ function connectedAfterRemoval(box,remaining){
 }
 function fillExposedTop(p,height){
     if(p.compactKind===undefined)return;
-    const supports=p.boxes.filter(box=>box.kind===p.compactKind&&box.z>0&&
+    const supports=p.boxes.filter(box=>boxFormat(box)===p.compactKind&&box.z>0&&
         !p.boxes.some(other=>other.z===box.z+box.h&&overlapArea(box,other)>0))
         .sort((a,b)=>b.z-a.z);
     for(const support of supports){
@@ -1161,12 +1193,23 @@ function lowerTopBoxes(pallet){
     pallet.height=base+Math.max(...pallet.boxes.map(box=>box.z+box.h));
 }
 function planOrder(items,dims,height,balanced,allowFlatBase=false){
+    items=items.map(box=>({...box,format:boxFormat(box)}));
     const upright=buildPlan(items,dims,height,balanced,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,balanced,true,allowFlatBase):null;
     let plan=alternative&&(!upright||alternative.length<upright.length)?alternative:upright;
-    if(allowFlatBase&&new Set(items.map(box=>box.kind)).size>1){
+    if(allowFlatBase&&new Set(items.map(boxFormat)).size>1){
         const layered=buildPlan(items,dims,height,balanced,false,true,true);
         if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
+    }
+    const kindsByFormat=new Map();
+    for(const box of items){
+        if(!kindsByFormat.has(box.format))kindsByFormat.set(box.format,new Set());
+        kindsByFormat.get(box.format).add(box.kind);
+    }
+    if(plan?.length>1&&!balanced&&[...kindsByFormat.values()].some(kinds=>kinds.size>1)){
+        const separated=buildPlan(items,dims,height,false,false,allowFlatBase,false,true);
+        if(separated&&separated.length===plan.length&&
+            separated.reduce((sum,p)=>sum+articleMix(p),0)<plan.reduce((sum,p)=>sum+articleMix(p),0))plan=separated;
     }
     if(plan)for(const pallet of plan){
         if(allowFlatBase)lowerTopBoxes(pallet);
@@ -1205,12 +1248,12 @@ function baseLayerDeficit(plan){
     let deficit=0;
     for(const p of plan){
         const floor=p.boxes.filter(box=>box.z===0);
-        if(!floor.length||floor.some(box=>box.kind!==floor[0].kind))continue;
+        if(!floor.length||floor.some(box=>boxFormat(box)!==boxFormat(floor[0])))continue;
         const box=floor[0];
         if(floor.some(other=>other.h!==box.h))continue;
         const upright=Math.floor(p.l/box.l+1e-9)*Math.floor(p.p/box.p+1e-9);
         const turned=Math.floor(p.l/box.p+1e-9)*Math.floor(p.p/box.l+1e-9);
-        const available=p.boxes.filter(other=>other.kind===box.kind&&other.h===box.h).length;
+        const available=p.boxes.filter(other=>boxFormat(other)===boxFormat(box)&&other.h===box.h).length;
         deficit+=Math.max(0,Math.min(available,Math.max(upright,turned))-floor.length);
     }
     return deficit;
@@ -1219,19 +1262,28 @@ function compareShipments(a,b){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
     const area=plan=>plan.reduce((sum,p)=>sum+p.l*p.p,0);
     const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
-    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
+    return a.length-b.length||inversions(a)-inversions(b)||area(a)-area(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
 }
-function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false){
+function articleMix(p){
+    const formats=new Map();
+    for(const box of p.boxes){
+        const format=boxFormat(box);
+        if(!formats.has(format))formats.set(format,new Set());
+        formats.get(format).add(box.kind);
+    }
+    return [...formats.values()].reduce((sum,kinds)=>sum+kinds.size-1,0);
+}
+function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false,keepArticles=false){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const out=[];
     while(pending.length){
         const candidates=dims.flatMap(dim=>palletCandidates(dim,pending,height,allowSmallFace,allowFlatBase,layered)).filter(c=>c.p.boxes.length);
         if(allowFlatBase)for(const candidate of candidates)candidate.inversions=loadingInversions(candidate.p);
         if(layered)for(const candidate of candidates){
-            candidate.leadingCount=candidate.p.boxes.filter(box=>box.kind===pending[0].kind).length;
+            candidate.leadingCount=candidate.p.boxes.filter(box=>boxFormat(box)===boxFormat(pending[0])).length;
         }
-        candidates.sort((a,b)=>(layered?(Number(a.inversions>1e-8)-Number(b.inversions>1e-8)||b.leadingCount-a.leadingCount||Number(Boolean(b.layeredBase))-Number(Boolean(a.layeredBase))):0)||b.p.boxes.length-a.p.boxes.length||
-            a.p.l*a.p.p-b.p.l*b.p.p||b.p.volume-a.p.volume||(a.inversions??0)-(b.inversions??0)||
+        candidates.sort((a,b)=>(keepArticles?articleMix(a.p)-articleMix(b.p):0)||(layered?(Number(a.inversions>1e-8)-Number(b.inversions>1e-8)||b.leadingCount-a.leadingCount||Number(Boolean(b.layeredBase))-Number(Boolean(a.layeredBase))):0)||b.p.boxes.length-a.p.boxes.length||
+            a.p.l*a.p.p-b.p.l*b.p.p||articleMix(a.p)-articleMix(b.p)||b.p.volume-a.p.volume||(a.inversions??0)-(b.inversions??0)||
             Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
         if(!candidates.length)return null;
         const {p,remaining}=candidates[0];
@@ -1502,6 +1554,8 @@ function manualLayoutIssues(pallet, all=false){
             {issues.add('Sovrapposizione sul piano a '+(base+box.z)+' cm: '+(box.id||'collo '+(index+1))+'.');if(!all)return [...issues];}
     }
     for(const box of boxes){
+        const levels=new Set(boxes.filter(other=>other.kind===box.kind).map(other=>other.z));
+        if(levels.size>box.maxLayers){issues.add('Superato il numero massimo di piani per '+(box.id||'un articolo')+'.');if(!all)return [...issues];}
         if(box.z===0)continue;
         const area=box.l*box.p;
         const surface=boxes.filter(other=>Math.abs(other.z+other.h-box.z)<eps);
@@ -1510,8 +1564,6 @@ function manualLayoutIssues(pallet, all=false){
         if(covered+eps<area&&!bridgesOpening(box,covered,pinwheelOpenings(surface))&&
             !continuousSupports(supports).some(other=>allowsOverhang(box,other)))
             {issues.add('Appoggio insufficiente a '+(base+box.z)+' cm per '+(box.id||'un collo')+'.');if(!all)return [...issues];}
-        const levels=new Set(boxes.filter(other=>other.kind===box.kind&&other.z<box.z&&overlapArea(box,other)>eps).map(other=>other.z));
-        if(levels.size>=box.maxLayers){issues.add('Superato il numero massimo di piani per '+(box.id||'un articolo')+'.');if(!all)return [...issues];}
     }
     if(!connectedAfterRemoval({z:0,h:Math.max(...boxes.map(box=>box.z+box.h))},boxes))issues.add('La disposizione lascia una scatola o una colonna isolata.');
     return [...issues];
