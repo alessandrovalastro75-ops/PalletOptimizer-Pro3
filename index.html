@@ -98,7 +98,9 @@ html,body{background:#fff}
 #productDialog #articlesSelectionGrid button{text-align:left;min-width:0;overflow-wrap:anywhere}
 #productDialog #articlesSelectionGrid button[aria-pressed=true]{border-color:#ffc34d}
 #productDialog #selectedArticlePanel .gold{margin-top:8px;background:#ffbd48;color:#142034}
-#accessoryPicker summary{cursor:pointer;color:#ffcf78}
+#productDialog #accessoryToggle{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:44px;color:#ffcf78;font-weight:700;cursor:pointer}
+#accessoryToggle[aria-expanded="true"] .accessory-chevron{transform:rotate(180deg)}
+#accessoryForm[hidden]{display:none}
 #accessoryForm input{display:block;width:100%;min-width:0}
 #pickerFeedback:empty{display:none}
 </style><style>
@@ -176,7 +178,7 @@ html,body{background:#fff}
 <dialog id="productDialog" aria-labelledby="productTitle">
 <form method="dialog"><button aria-label="Chiudi selezione articoli">✕</button></form>
 <h2 id="productTitle">Aggiungi prodotto</h2>
-<div id="picker" class="space-y-3"><details id="accessoryPicker"><summary>Scatola accessori</summary><form id="accessoryForm" onsubmit="addAccessory(event)" class="space-y-2"><div class="grid grid-cols-2 gap-2"><label>Lunghezza (cm)<input name="l" type="number" min="0.01" step="any" required ></label><label>Larghezza (cm)<input name="p" type="number" min="0.01" step="any" required ></label><label>Altezza (cm)<input name="h" type="number" min="0.01" step="any" required ></label><label>Peso per collo (kg)<input name="weight" type="number" min="0.01" step="any" required ></label><label>Quantità<input name="qty" type="number" min="1" step="1" required value="1" ></label><label>Max piani (facoltativo)<input name="maxLayers" type="number" min="1" step="1" ></label></div><button type="submit" class="gold">Inserisci scatola accessori</button></form></details><input id="catalogSearch" oninput="filterCatalog()" placeholder="Cerca un articolo"><p id="pickerFeedback" role="status"></p><div id="articlesSelectionGrid" class="grid grid-cols-2 gap-2"></div><div id="selectedArticlePanel" class="hidden space-y-2"><div id="selArtName"></div><label for="selArtQty">Quantità</label><div class="quantity-control"><button type="button" aria-label="Diminuisci quantità di uno" onclick="adjustQty(-1)">↓</button><input id="selArtQty" type="number" inputmode="numeric" min="1" step="1" value="1"><button type="button" aria-label="Aumenta quantità di uno" onclick="adjustQty(1)">↑</button></div><button class="gold" onclick="addToManifest()">Inserisci in distinta</button></div></div>
+<div id="picker" class="space-y-3"><div id="accessoryPicker"><button id="accessoryToggle" type="button" aria-expanded="false" aria-controls="accessoryForm" onclick="setAccessoryPicker(this.getAttribute('aria-expanded')==='false')">Scatola accessori <span class="accessory-chevron" aria-hidden="true">⌄</span></button><form id="accessoryForm" hidden onsubmit="addAccessory(event)" class="mt-2 space-y-2"><div class="grid grid-cols-2 gap-2"><label>Lunghezza (cm)<input name="l" type="number" min="0.01" step="any" required ></label><label>Larghezza (cm)<input name="p" type="number" min="0.01" step="any" required ></label><label>Altezza (cm)<input name="h" type="number" min="0.01" step="any" required ></label><label>Peso per collo (kg)<input name="weight" type="number" min="0.01" step="any" required ></label><label>Quantità<input name="qty" type="number" min="1" step="1" required value="1" ></label><label>Max piani (facoltativo)<input name="maxLayers" type="number" min="1" step="1" ></label></div><button type="submit" class="gold">Inserisci scatola accessori</button></form></div><input id="catalogSearch" oninput="filterCatalog()" placeholder="Cerca un articolo"><p id="pickerFeedback" role="status"></p><div id="articlesSelectionGrid" class="grid grid-cols-2 gap-2"></div><div id="selectedArticlePanel" class="hidden space-y-2"><div id="selArtName"></div><label for="selArtQty">Quantità</label><div class="quantity-control"><button type="button" aria-label="Diminuisci quantità di uno" onclick="adjustQty(-1)">↓</button><input id="selArtQty" type="number" inputmode="numeric" min="1" step="1" value="1"><button type="button" aria-label="Aumenta quantità di uno" onclick="adjustQty(1)">↑</button></div><button class="gold" onclick="addToManifest()">Inserisci in distinta</button></div></div>
 </dialog>
 <dialog id="composeDialog" aria-labelledby="assembleTitle">
 <header class="assembly-header"><h2 id="assembleTitle">Disposizione manuale</h2><button type="button" id="assemblyClose" aria-label="Chiudi disposizione manuale">✕</button></header>
@@ -274,9 +276,14 @@ html,body{background:#fff}
             document.getElementById('catalogCount').innerText = catalog.length;
         });
 
+        function setAccessoryPicker(open) {
+            document.getElementById('accessoryToggle').setAttribute('aria-expanded', String(open));
+            document.getElementById('accessoryForm').hidden = !open;
+        }
+
         function openProductPicker() {
             document.getElementById('accessoryForm').reset();
-            document.getElementById('accessoryPicker').open = false;
+            setAccessoryPicker(false);
             document.getElementById('catalogSearch').value = '';
             document.getElementById('pickerFeedback').textContent = '';
             document.getElementById('selectedArticlePanel').classList.add('hidden');
