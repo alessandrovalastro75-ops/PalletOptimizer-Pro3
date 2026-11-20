@@ -139,6 +139,78 @@ html,body{background:#fff}
 <link rel="icon" href="./icon-192.png" type="image/png">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <meta name="theme-color" content="#0a1628">
+<style>
+@media screen {
+    :root {
+        --surface: #edf2f8;
+        --field: #ffffff;
+        --ink: #152539;
+        --muted: #47596e;
+        --surface-line: #a7b5c7;
+        --control: #172b43;
+        --control-edge: #506783;
+    }
+
+    html, body { background: #091321; }
+    .top { background: #101f31; }
+    .dashboard .panel:not(.viewer),
+    #viewFooter, #viewerLayers, #articleLegend,
+    #productDialog, #manualDialog, #detailDialog, .project-dialog,
+    #catalogModal > div, .assembly-header, .assembly-footer, .assembly-body aside, #assemblyReview > div {
+        color-scheme: light;
+        background: var(--surface);
+        color: var(--ink);
+        border-color: var(--surface-line);
+    }
+    .dashboard .panel:not(.viewer) h2,
+    :is(dialog, #catalogModal) :is(h2, h3, .text-amber-400) { color: var(--ink); }
+    .commessa p, .metrics p, .stats, .height-row small,
+    #manifestList .text-slate-400, #catalogModal .text-slate-300,
+    #catalogModal .text-slate-400, #assemblyStock span { color: var(--muted); }
+    #manifestList > .bg-slate-950, #catalogModalBody .bg-slate-950 {
+        background: var(--field);
+        border-color: var(--surface-line);
+    }
+    #manifestList .text-white, #catalogModalBody .text-white { color: var(--ink); }
+    #manifestList .text-amber-400, #palletVolume,
+    .shipment-volume strong, #projectSaveError, #assemblyCatalogPicker summary { color: #75440b; }
+    .metrics .stats div:first-child strong { color: #146141; }
+    #showDetails { color: #fff5d8 !important; }
+
+    .dashboard input, #productDialog input, #manualDialog select,
+    .project-dialog input, #heavyReviewDialog select,
+    #catalogModalBody input, #composeDialog input, #composeDialog select {
+        color-scheme: light;
+        background: var(--field);
+        border-color: #8395ad;
+        color: var(--ink);
+    }
+    input::placeholder { color: #57697e; opacity: 1; }
+    .height-picker #heightOptions { background: var(--surface); border-color: var(--surface-line); }
+
+    nav button, .dashboard button, .dashboard select, #viewerLayer,
+    #productDialog button, #manualDialog button, #detailDialog form button,
+    .project-dialog button, #catalogModal button, #composeDialog button {
+        color-scheme: dark;
+        color: #f6f8ff;
+        background: var(--control);
+        border: 1px solid var(--control-edge);
+    }
+    .dashboard button.gold, nav button.gold,
+    #productDialog #selectedArticlePanel .gold, #productDialog #accessoryForm .gold,
+    #manualDialog button[aria-pressed="true"], #heavyReviewChoices button[aria-pressed="true"],
+    #productDialog #articlesSelectionGrid button[aria-pressed="true"] {
+        background: #233b59;
+        color: #fff2c6;
+        border-color: #e9ae4b;
+        box-shadow: inset 0 0 0 1px #e9ae4b;
+    }
+    #formats .gold svg, #productDialog #articlesSelectionGrid .text-amber-400 { color: #ffd585; }
+    #productDialog #articlesSelectionGrid .text-slate-400 { color: #c9d6e6; }
+    .dashboard .action button, #composeDialog #assemblyAdd { background: #174836; border-color: #408269; }
+    :is(button, input, select, summary):focus-visible { outline: 2px solid #267bce; outline-offset: 2px; }
+}
+</style>
 </head><body>
 <header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button></nav></header>
 <main class="dashboard">
@@ -1370,7 +1442,8 @@ function loadingInversions(pallet){
             penalty+=overlap/area * (Math.max(0,1-lowerArea/area)+Math.max(0,1-lower.weight/upper.weight));
         }
     }
-    return penalty;
+    // Ignore floating-point noise when comparing geometrically equivalent loads.
+    return Math.round(penalty*1e8)/1e8;
 }
 function baseLayerDeficit(plan){
     let deficit=0;
