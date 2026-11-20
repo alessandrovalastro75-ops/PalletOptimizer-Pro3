@@ -1047,6 +1047,67 @@ function uniformGridCandidates(dim,items,height){
         return [gridLayout(dim,items,l,p,cols,rows,layers,weightLimit)];
     });
 }
+function mixedOrientationCandidates(dim,items,height){
+    const box=items[0];
+    if(items.length<2||items.some(item=>item.weight>=8))return [];
+    const sides=[[box.l,box.h,box.p],[box.p,box.h,box.l]]
+        .filter(([,,h])=>h!==box.h);
+    const candidates=[];
+    for(const swap of [false,true]){
+        const [width,depth]=swap?[dim[1],dim[0]]:dim;
+        for(const [u,v] of [[box.l,box.p],[box.p,box.l]]){
+            for(const [a,b,h] of sides){
+                for(const [w,d] of [[a,b],[b,a]]){
+                    const normalRows=Math.min(items.length,Math.floor(depth/v+1e-9));
+                    const sideRows=Math.min(items.length,Math.floor(depth/d+1e-9));
+                    if(!normalRows||!sideRows||u+w>width+1e-8)continue;
+                    const maxNormal=Math.min(Math.floor((items.length-1)/normalRows),Math.floor((width-w)/u+1e-9));
+                    const stride=Math.max(1,Math.ceil((maxNormal-1)/24));
+                    for(let normal=1;normal<=maxNormal;normal=normal===maxNormal?maxNormal+1:Math.min(maxNormal,normal+stride)){
+                        const side=Math.min(items.length-1,Math.floor((width-normal*u)/w+1e-9));
+                        const columns=[];
+                        const add=(count,rows,l,p,step,offset,smallFace)=>{
+                            for(let col=0;col<count;col++)for(let row=0;row<rows;row++){
+                                if(columns.length>=items.length)break;
+                                const x=offset+col*l,y=row*p;
+                                columns.push({x:swap?y:x,y:swap?x:y,l:swap?p:l,p:swap?l:p,h:step,z:0,smallFace});
+                            }
+                        };
+                        add(normal,normalRows,u,v,box.h,0,false);
+                        add(side,sideRows,w,d,h,normal*u,true);
+                        const pallet=emptyPallet(dim);
+                        const remaining=[];
+                        const levelsByKind=new Map();
+                        for(const item of items){
+                            let best=null;
+                            if(!levelsByKind.has(item.kind))levelsByKind.set(item.kind,new Set());
+                            const levels=levelsByKind.get(item.kind);
+                            if(pallet.weight+item.weight<=weightLimit){
+                                for(const column of columns){
+                                    if(base+column.z+column.h>height||(levels.size>=item.maxLayers&&!levels.has(column.z)))continue;
+                                    if(!best||column.z+column.h<best.z+best.h||
+                                        (column.z+column.h===best.z+best.h&&column.z<best.z))best=column;
+                                }
+                            }
+                            if(!best){remaining.push(item);continue;}
+                            levels.add(best.z);
+                            pallet.boxes.push({...item,...best});
+                            pallet.weight+=item.weight;
+                            pallet.volume+=item.l*item.p*item.h;
+                            best.z+=best.h;
+                            pallet.height=Math.max(pallet.height,base+best.z);
+                        }
+                        if(!pallet.boxes.some(b=>b.smallFace)||!pallet.boxes.some(b=>!b.smallFace))continue;
+                        // An occupied column must be connected to the rest of the load.
+                        if(!connectedAfterRemoval({z:0,h:pallet.height-base},pallet.boxes))continue;
+                        candidates.push({p:pallet,remaining,uneven:unevenLayers(pallet)});
+                    }
+                }
+            }
+        }
+    }
+    return candidates;
+}
 function layeredCandidates(dim,items,groups,height,allowSmallFace){
     const box=items[0];
     const own=items.filter(item=>boxFormat(item)===boxFormat(box));
@@ -1107,6 +1168,15 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
     });
     if(groups.size===1){
         candidates.push(...uniformGridCandidates(dim,items,height));
+        if(allowSmallFace){
+            candidates.push(...mixedOrientationCandidates(dim,items,height));
+            const originals=new Map(items.map(box=>[smallestFace(box),box]));
+            if(!originals.has(null)){
+                for(const grid of uniformGridCandidates(dim,[...originals.keys()],height)){
+                    candidates.push({...grid,remaining:grid.remaining.map(box=>originals.get(box))});
+                }
+            }
+        }
         for(const kind of new Set(items.map(box=>box.kind))){
             const own=items.filter(box=>box.kind===kind);
             if(own.length===items.length)break;
@@ -1196,7 +1266,9 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
     items=items.map(box=>({...box,format:boxFormat(box)}));
     const upright=buildPlan(items,dims,height,balanced,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,balanced,true,allowFlatBase):null;
-    let plan=alternative&&(!upright||alternative.length<upright.length)?alternative:upright;
+    let plan=upright;
+    if(alternative&&(!upright||alternative.length<upright.length||
+        (samePalletFormats(alternative,upright)&&compareLoadProfiles(alternative,upright)<0)))plan=alternative;
     if(allowFlatBase&&new Set(items.map(boxFormat)).size>1){
         const layered=buildPlan(items,dims,height,balanced,false,true,true);
         if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
@@ -1216,6 +1288,18 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
         centerLoad(pallet);
     }
     return plan;
+}
+function samePalletFormats(a,b){
+    const formats=plan=>plan.map(p=>p.l+'×'+p.p).sort().join(',');
+    return formats(a)===formats(b);
+}
+function compareLoadProfiles(a,b){
+    const sum=(plan,measure)=>plan.reduce((total,p)=>total+measure(p),0);
+    const deckCoverage=p=>p.boxes.filter(box=>box.z===0).reduce((area,b)=>area+b.l*b.p,0)/(p.l*p.p);
+    return sum(a,loadingInversions)-sum(b,loadingInversions)||
+        Math.max(...a.map(p=>p.height))-Math.max(...b.map(p=>p.height))||
+        sum(a,p=>p.height)-sum(b,p=>p.height)||
+        sum(b,deckCoverage)-sum(a,deckCoverage);
 }
 function centerLoad(pallet){
     const boxes=pallet.boxes;
