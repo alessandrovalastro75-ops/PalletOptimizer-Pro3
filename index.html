@@ -42,8 +42,20 @@ h2{color:var(--gold);font-size:clamp(17px,1.9vw,28px);line-height:1.15}h2 i{font
 #viewFooter #showDetails{color:var(--gold)}#detailDialog{border:1px solid #516381;background:#101f33;color:white;border-radius:14px;padding:20px;width:min(94vw,740px);max-height:88vh}#detailDialog::backdrop{background:#020611bb}#detailDialog form button{float:right;background:#2b4260;border-radius:6px;padding:7px 12px}#detailDialog h3,.print-sheet h3{margin:14px 0 6px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:5px 8px;border-bottom:1px solid #66758b80}
 #printReportRoot{display:none}
 #printReportRoot.measuring{display:block;position:absolute;left:-10000px;top:0;width:186mm}
-.print-sheet{font:10pt/1.2 system-ui}.print-sheet img{height:70mm;width:100%;object-fit:contain}.print-sheet h1{font-size:19pt}.print-sheet table{font-size:9pt;overflow-wrap:anywhere}
-@media print{@page{size:A4;margin:12mm}html,body{background:white!important;color:#000!important;display:block!important}body>*{display:none!important}body>#printReportRoot{display:block!important}.print-sheet{break-after:page;page-break-after:always;font:10pt/1.2 system-ui}.print-sheet:last-child{break-after:auto;page-break-after:auto}.print-sheet img{height:70mm;width:100%;object-fit:contain}.print-sheet header{position:static;background:white;color:#000}.print-sheet h1{font-size:19pt}.print-sheet h2,.print-sheet h3{color:black}.print-sheet table{font-size:9pt}.print-sheet tr{break-inside:avoid}}
+.print-sheet{break-inside:avoid;page-break-inside:avoid;font:10pt/1.2 system-ui;color:#000;background:#fff;padding:3mm 0;border-bottom:1px solid #aab4c0}
+.print-sheet header{display:block;position:static;padding:0;margin:0 0 2mm;background:none;color:inherit;border:0;box-shadow:none}
+.print-sheet h1{font-size:14pt;margin:0 0 1mm}
+.print-sheet p{margin:0 0 1mm}
+.print-pallet-body{display:grid;grid-template-columns:52mm minmax(0,1fr);align-items:start;gap:3mm}
+.print-sheet img{display:block;width:100%;height:34mm;object-fit:contain}
+.print-sheet table{font-size:9pt;overflow-wrap:anywhere}
+.print-sheet th,.print-sheet td{padding:1mm 1.5mm}
+@media print{
+    @page{size:A4;margin:12mm}
+    html,body{background:white!important;color:#000!important;display:block!important;margin:0!important;padding:0!important}
+    body>*{display:none!important}
+    body>#printReportRoot{display:block!important}
+}
 </style>
 <style>
 html,body{background:#fff}
@@ -3273,7 +3285,7 @@ async function printOrder(){
     root.innerHTML=pallets.map((p,i)=>{
         const picture=document.createElement('canvas');
         picture.width=780;picture.height=460;draw(picture,p,flat);
-        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> '+customer+'</p><p><strong>Ordine</strong> '+order+'</p></header><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'">'+palletDetails(p)+'</article>';
+        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> '+customer+'</p><p><strong>Ordine</strong> '+order+'</p></header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
     }).join('');
     await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
     root.classList.add('measuring');
