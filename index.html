@@ -28,6 +28,8 @@ h2{color:var(--gold);font-size:clamp(17px,1.9vw,28px);line-height:1.15}h2 i{font
 [hidden]{display:none!important}
 .height-option{display:flex;align-items:center;justify-content:center;gap:6px}
 .height-option svg{height:27px;width:24px;flex:none}
+#balanceOption{display:flex;align-items:center;gap:8px;margin-top:10px}
+#balanceOption input{width:auto;margin:0;accent-color:#13758a}
 #formats{display:grid;gap:6px;grid-template-columns:repeat(4,minmax(0,1fr));margin-top:12px}
 #formats button{display:grid;justify-items:center;padding:6px 2px;gap:4px;font-size:clamp(11px,1.1vw,15px)}
 #formats button:disabled{opacity:.64;cursor:default}#formats svg{width:42px;height:26px;color:var(--gold)}#formats .gold svg{color:#111827}
@@ -405,9 +407,8 @@ html,body{background:#fff}
 <section class="panel padded"><h2>Modalità di pallettizzazione</h2>
 <div id="packingModes" class="seg options">
 <button class="gold" data-mode="auto" aria-pressed="true">Automatica</button>
-<button data-mode="balanced" aria-pressed="false">Bilanciata</button>
 <button data-mode="manual" aria-pressed="false">Manuale</button>
-</div><div id="formats" aria-label="Formati pallet"></div></section>
+</div><label id="balanceOption"><input id="balanceWeight" type="checkbox" checked> Bilancia il peso a parità di superficie</label><div id="formats" aria-label="Formati pallet"></div></section>
 <section class="panel padded"><h2><i>2</i> Articoli da pallettizzare</h2><div class="article-actions"><button onclick="openCatalogModal()">📦 Catalogo (<span id="catalogCount">4</span>)</button><button type="button" class="add" onclick="openProductPicker()" aria-haspopup="dialog">＋ &nbsp; Aggiungi Prodotto</button></div>
 <div id="manifestCountBadge" hidden></div><div id="manifestList"></div></section>
 <section class="panel padded"><h2><i>3</i> Disposizione manuale</h2><div class="article-actions"><button type="button" id="openCompose">Apri disposizione manuale</button></div></section>
@@ -1034,6 +1035,7 @@ el('packingModes').onclick=e=>{
     const b=e.target.closest('[data-mode]');
     if(!b)return;
     mode=b.dataset.mode;
+    el('balanceOption').hidden=mode!=='auto';
     press(el('packingModes'),'mode',mode);
     showFormats();
 };
@@ -1277,6 +1279,58 @@ function pairedBase(dim,box,layered=false){
     if(p>2*short)pallet.free.push({x:0,y:2*short,l,p:p-2*short});
     return pallet;
 }
+function placeUpperPinwheels(p,items,height){
+    const pending=[...items];
+    const formats=new Set(items.map(boxFormat));
+    for(const format of formats){
+        let group=pending.filter(box=>boxFormat(box)===format);
+        if(group.length<4)continue;
+        const pattern=pinwheelPallet([p.l,p.p],group[0]);
+        if(!pattern)continue;
+        const [origin]=pattern.columns;
+        const span=Math.max(group[0].l,group[0].p)+Math.min(group[0].l,group[0].p);
+        const slots=pattern.columns.map(({x,y,l,p})=>({x:x-origin.x,y:y-origin.y,l,p}));
+        while(group.length>=4){
+            const z=p.height-base;
+            if(base+z+group[0].h>height)break;
+            const supports=p.boxes.filter(box=>Math.abs(box.z+box.h-z)<1e-8);
+            const openings=pinwheelOpenings(supports);
+            const contactFaces=p.flatBase?[]:continuousSupports(supports);
+            const left=Math.min(...supports.map(box=>box.x)), right=Math.max(...supports.map(box=>box.x+box.l));
+            const front=Math.min(...supports.map(box=>box.y)), back=Math.max(...supports.map(box=>box.y+box.p));
+            const anchors=(lo,hi,side)=>new Set([(lo+hi-span)/2,lo,hi-span,(side-span)/2]);
+            const batch=group.filter(item=>canUseLayer(p,item,z)).slice(0,4);
+            if(batch.length<4||p.weight+batch.reduce((sum,item)=>sum+item.weight,0)>weightLimit)break;
+            let placement=null;
+            for(const x of anchors(left,right,p.l)){
+                for(const y of anchors(front,back,p.p)){
+                    if(x<0||y<0||x+span>p.l||y+span>p.p)continue;
+                    const spots=slots.map(slot=>({...slot,x:x+slot.x,y:y+slot.y,z}));
+                    const valid=spots.every((spot,i)=>{
+                        const item=batch[i];
+                        if(p.boxes.some(box=>boxFormat(box)===format&&box.weight<item.weight&&overlapArea(spot,box)>1e-8))return false;
+                        const covered=supports.reduce((sum,box)=>sum+overlapArea(spot,box),0);
+                        return covered+1e-8>=spot.l*spot.p||bridgesOpening(spot,covered,openings)||
+                            contactFaces.some(box=>allowsOverhang(spot,box));
+                    });
+                    if(valid){placement=spots;break;}
+                }
+                if(placement)break;
+            }
+            if(!placement)break;
+            for(const [i,item] of batch.entries()){
+                const spot=placement[i];
+                p.boxes.push({...item,...spot,upperPinwheel:true});
+                p.weight+=item.weight;
+                p.volume+=spot.l*spot.p*item.h;
+                pending.splice(pending.indexOf(item),1);
+            }
+            p.height=base+z+batch[0].h;
+            group=pending.filter(box=>boxFormat(box)===format);
+        }
+    }
+    return pending;
+}
 function flatBaseCandidates(dim,items,groups,height){
     const result=[];
     for(const {box} of groups.values()){
@@ -1299,10 +1353,15 @@ function flatBaseCandidates(dim,items,groups,height){
                 const {p:pallet,remaining}=layout;
                 pallet.flatBase=true;
                 pallet.free=[];
-                const leftover=others.filter(item=>!put(pallet,item,height,weightLimit,Infinity));
-                if(leftover.length<others.length)result.push({
-                    p:pallet,remaining:[...remaining,...leftover],uneven:unevenLayers(pallet)
-                });
+                for(const p of [{...pallet,boxes:[...pallet.boxes],free:[]},pallet]){
+                    const before=p.boxes.length;
+                    const pending=p===pallet?others:placeUpperPinwheels(p,others,height);
+                    if(p!==pallet&&p.boxes.length===before)continue;
+                    const leftover=pending.filter(item=>!put(p,item,height,weightLimit,Infinity));
+                    if(leftover.length<others.length)result.push({
+                        p,remaining:[...remaining,...leftover],uneven:unevenLayers(p)
+                    });
+                }
             }
         }
     }
@@ -1418,10 +1477,15 @@ function layeredCandidates(dim,items,groups,height,allowSmallFace){
         const remaining=pending.filter(item=>!put(wheel,item,height,weightLimit,Infinity));
         layouts.push({p:wheel,remaining});
     }
-    return layouts.map(({p,remaining})=>{
+    return layouts.flatMap(({p,remaining})=>{
         p.allowSmallFace=allowSmallFace;
-        const next=other.filter(item=>reservedKinds.has(boxFormat(item))||!put(p,item,height,weightLimit,Infinity));
-        return {p,remaining:[...remaining,...next],uneven:unevenLayers(p),layeredBase:true};
+        const wheel={...p,boxes:[...p.boxes],free:p.free.map(slot=>({...slot})),columns:p.columns.map(slot=>({...slot}))};
+        const pending=placeUpperPinwheels(wheel,other,height);
+        const options=pending.length<other.length?[[wheel,pending],[p,other]]:[[p,other]];
+        return options.map(([candidate,unplaced])=>{
+            const next=unplaced.filter(item=>reservedKinds.has(boxFormat(item))||!put(candidate,item,height,weightLimit,Infinity));
+            return {p:candidate,remaining:[...remaining,...next],uneven:unevenLayers(candidate),layeredBase:true};
+        });
     });
 }
 function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBase=false, layered=false){
@@ -1554,7 +1618,7 @@ function fillExposedTop(p,height){
 }
 function lowerTopBoxes(pallet){
     const originalHeight=pallet.height-base;
-    const donors=pallet.boxes.filter(box=>box.z>0&&Math.abs(box.z+box.h-originalHeight)<1e-8);
+    const donors=pallet.boxes.filter(box=>!box.upperPinwheel&&box.z>0&&Math.abs(box.z+box.h-originalHeight)<1e-8);
     for(const box of donors){
         const remaining=pallet.boxes.filter(other=>other!==box);
         if(!connectedAfterRemoval(box,remaining))continue;
@@ -1571,11 +1635,11 @@ function lowerTopBoxes(pallet){
 }
 function planOrder(items,dims,height,balanced,allowFlatBase=false){
     items=items.map(box=>({...box,format:boxFormat(box)}));
-    const upright=buildPlan(items,dims,height,balanced,false,allowFlatBase);
-    const alternative=items.some(smallestFace)?buildPlan(items,dims,height,balanced,true,allowFlatBase):null;
+    const upright=buildPlan(items,dims,height,false,allowFlatBase);
+    const alternative=items.some(smallestFace)?buildPlan(items,dims,height,true,allowFlatBase):null;
     let plan=upright;
     if(allowFlatBase&&new Set(items.map(boxFormat)).size>1){
-        const layered=buildPlan(items,dims,height,balanced,false,true,true);
+        const layered=buildPlan(items,dims,height,false,true,true);
         if(layered&&(!plan||compareShipments(layered,plan)<0))plan=layered;
     }
     if(preferSideRotation(alternative,plan))plan=alternative;
@@ -1584,11 +1648,12 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
         if(!kindsByFormat.has(box.format))kindsByFormat.set(box.format,new Set());
         kindsByFormat.get(box.format).add(box.kind);
     }
-    if(plan?.length>1&&!balanced&&[...kindsByFormat.values()].some(kinds=>kinds.size>1)){
-        const separated=buildPlan(items,dims,height,false,false,allowFlatBase,false,true);
+    if(plan?.length>1&&[...kindsByFormat.values()].some(kinds=>kinds.size>1)){
+        const separated=buildPlan(items,dims,height,false,allowFlatBase,false,true);
         if(separated&&separated.length===plan.length&&totalPalletArea(separated)<=totalPalletArea(plan)&&
             separated.reduce((sum,p)=>sum+articleMix(p),0)<plan.reduce((sum,p)=>sum+articleMix(p),0))plan=separated;
     }
+    if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height);
     if(plan)for(const pallet of plan){
         if(allowFlatBase)lowerTopBoxes(pallet);
         centerLoad(pallet);
@@ -1694,7 +1759,7 @@ function stackedHeavyPairs(pallet){
     }
     return pairs;
 }
-function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layered=false,keepArticles=false,keepHeavyLow=false){
+function buildPlan(items,dims,height,allowSmallFace,allowFlatBase,layered=false,keepArticles=false,keepHeavyLow=false){
     const pending=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const out=[];
     while(pending.length){
@@ -1716,21 +1781,28 @@ function buildPlan(items,dims,height,balanced,allowSmallFace,allowFlatBase,layer
         pending.push(...remaining);
         if(layered)pending.sort((a,b)=>b.l*b.p-a.l*a.p||b.weight-a.weight||b.h-a.h);
     }
-    if(!balanced||out.length===1)return out;
+    return out;
+}
+function rebalancePlan(items,out,height){
+    const allowSmallFace=out.some(p=>p.boxes.some(box=>box.smallFace));
+    const spread=plan=>Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
+    const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
+    const stacking=plan=>plan.reduce((sum,p)=>sum+stackedHeavyPairs(p),0);
     const meanWeight=tare+items.reduce((s,b)=>s+b.weight,0)/out.length;
-    const meanVolume=items.reduce((s,b)=>s+b.l*b.p*b.h,0)/out.length;
+    const sorted=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
+    const originalInversions=inversions(out),originalStacking=stacking(out);
+    let best=out;
     for(const slack of [1.08,1.2,1.5,Infinity]){
         const plan=out.map(p=>({...emptyPallet([p.l,p.p]),allowSmallFace}));
         const weight=Number.isFinite(slack)?Math.min(weightLimit,tare+(meanWeight-tare)*slack):weightLimit;
-        const volume=meanVolume*slack;
-        const sorted=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
-        const place=(box,floorOnly)=>[...plan].sort((a,b)=>
-            (a.weight-b.weight)/(meanWeight-tare)+(a.volume-b.volume)/meanVolume)
-            .some(p=>put(p,box,height,weight,volume,floorOnly));
+        const place=(box,floorOnly)=>[...plan].sort((a,b)=>a.weight-b.weight||a.volume-b.volume)
+            .some(p=>put(p,box,height,weight,Infinity,floorOnly));
         const aboveFloor=sorted.filter(box=>!place(box,true));
-        if(aboveFloor.every(box=>place(box,false))&&plan.every(p=>p.boxes.length))return plan;
+        if(aboveFloor.every(box=>place(box,false))&&plan.every(p=>p.boxes.length)&&
+            spread(plan)+1e-8<spread(best)&&inversions(plan)<=originalInversions+1e-8&&
+            stacking(plan)<=originalStacking)best=plan;
     }
-    return out;
+    return best;
 }
 let showEmptyViewer = false;
 function refreshAfterRemoval(){
@@ -1759,7 +1831,7 @@ function calculateOrder(selected=0){
         !Number.isInteger(b.maxLayers)||b.maxLayers<1||b.weight+tare>weightLimit||![b,smallestFace(b)].some(shape=>shape&&shape.h+base<=height&&dims.some(([l,p])=>fits(shape,l,p))));
     if(invalid){alert('Il prodotto '+invalid.id+' non rientra nei limiti o ha dati incompleti.');return;}
     const items=remaining.flatMap(b=>Array.from({length:b.qty},()=>({...b})));
-    let planned=planOrder(items,dims,height,mode==='balanced',mode==='auto');
+    let planned=planOrder(items,dims,height,mode==='auto'&&el('balanceWeight').checked,mode==='auto');
     if(!planned){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
     if(mode==='auto'&&planned.some(p=>heavyUpperBoxes(p).length)){
         const lower=planWithHeavyLow(items,dims,height);
@@ -1775,8 +1847,8 @@ function calculateOrder(selected=0){
 function planWithHeavyLow(items,dims,height){
     const normalized=items.map(box=>({...box,format:boxFormat(box)}));
     const allowSide=items.some(smallestFace);
-    const build=side=>buildPlan(normalized,dims,height,false,side,true,false,false,true)||
-        buildPlan(normalized,dims,height,false,side,false,false,false,true);
+    const build=side=>buildPlan(normalized,dims,height,side,true,false,false,true)||
+        buildPlan(normalized,dims,height,side,false,false,false,true);
     const upright=build(false);
     const alternative=allowSide?build(true):null;
     const plan=preferSideRotation(alternative,upright)?alternative:upright;
@@ -2795,7 +2867,7 @@ function projectSnapshot(){
     const snapshotPallet=p=>({l:p.l,p:p.p,maxHeight:p.maxHeight,boxes:p.boxes});
     return {type:'PalletOptimizerProject',version:1,
         client:el('orderClient').value,order:el('orderNumber').value,
-        transport,truckHeight,mode,formats:[...manual],manifest,
+        transport,truckHeight,mode,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
         pallets:pallets.map(p=>({...snapshotPallet(p),manual:composedPallets.includes(p)})),
         draft:assembly?{...snapshotPallet(assembly),floorBoxes:assembly.floorBoxes,level:Number(el('assemblyZ').value),autoLevel:el('assemblyAutoZ').checked}:null};
 }
@@ -2926,7 +2998,9 @@ function setProject(project){
     composedPallets=project.manualPallets;
     el('orderClient').value=project.client;
     el('orderNumber').value=project.order;
-    transport=project.transport;truckHeight=project.truckHeight;mode=project.mode;
+    transport=project.transport;truckHeight=project.truckHeight;mode=project.mode==='balanced'?'auto':project.mode;
+    el('balanceWeight').checked=project.balanceWeight!==false;
+    el('balanceOption').hidden=mode!=='auto';
     manual.clear();
     for(const i of project.formats)manual.add(i);
     press(el('transport'),'transport',transport);
