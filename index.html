@@ -1728,11 +1728,21 @@ function totalPalletArea(plan){
 function comparePalletSurface(a,b){
     return totalPalletArea(a)-totalPalletArea(b)||a.length-b.length;
 }
+function firstUpperLayerFill(pallet){
+    const firstByKind=new Map();
+    for(const box of pallet.boxes){
+        const layer=firstByKind.get(box.kind);
+        if(!layer||box.z<layer.z-1e-8)firstByKind.set(box.kind,{z:box.z,count:1});
+        else if(Math.abs(box.z-layer.z)<1e-8)layer.count++;
+    }
+    return [...firstByKind.values()].reduce((sum,layer)=>sum+(layer.z>1e-8?layer.count:0),0);
+}
 function compareShipments(a,b){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
     const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
     const stacked=plan=>plan.reduce((sum,p)=>sum+stackedHeavyPairs(p),0);
-    return comparePalletSurface(a,b)||stacked(a)-stacked(b)||inversions(a)-inversions(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b);
+    return comparePalletSurface(a,b)||stacked(a)-stacked(b)||inversions(a)-inversions(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b)||
+        b.reduce((sum,p)=>sum+firstUpperLayerFill(p),0)-a.reduce((sum,p)=>sum+firstUpperLayerFill(p),0);
 }
 function articleMix(p){
     const formats=new Map();
@@ -1767,13 +1777,14 @@ function buildPlan(items,dims,height,allowSmallFace,allowFlatBase,layered=false,
         if(allowFlatBase)for(const candidate of candidates){
             candidate.inversions=loadingInversions(candidate.p);
             candidate.stackedHeavyPairs=stackedHeavyPairs(candidate.p);
+            candidate.firstUpperLayerFill=firstUpperLayerFill(candidate.p);
         }
         if(layered)for(const candidate of candidates){
             candidate.leadingCount=candidate.p.boxes.filter(box=>boxFormat(box)===boxFormat(pending[0])).length;
         }
         candidates.sort((a,b)=>(keepArticles?articleMix(a.p)-articleMix(b.p):0)||(layered?(Number(a.inversions>1e-8)-Number(b.inversions>1e-8)||b.leadingCount-a.leadingCount||Number(Boolean(b.layeredBase))-Number(Boolean(a.layeredBase))):0)||b.p.boxes.length-a.p.boxes.length||
             a.p.l*a.p.p-b.p.l*b.p.p||articleMix(a.p)-articleMix(b.p)||b.p.volume-a.p.volume||(a.stackedHeavyPairs??0)-(b.stackedHeavyPairs??0)||(a.inversions??0)-(b.inversions??0)||
-            Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||a.uneven-b.uneven);
+            Number(Boolean(b.p.flatBase))-Number(Boolean(a.p.flatBase))||a.p.height-b.p.height||(b.firstUpperLayerFill??0)-(a.firstUpperLayerFill??0)||a.uneven-b.uneven);
         if(!candidates.length)return null;
         const {p,remaining}=candidates[0];
         if(!keepHeavyLow)fillExposedTop(p,height);
