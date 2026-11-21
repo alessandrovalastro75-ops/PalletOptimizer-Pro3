@@ -1200,8 +1200,11 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
     }
     return null;
 }
+function canRotateOnSide(box){
+    return box.weight<8 && Math.min(box.l,box.p,box.h)<30;
+}
 function smallestFace(box){
-    if(box.weight>=8)return null;
+    if(!canRotateOnSide(box))return null;
     const [l,p,h]=[box.l,box.p,box.h].sort((a,b)=>a-b);
     if(h===box.h)return null;
     return {...box,l,p,h,smallFace:true};
@@ -1401,7 +1404,7 @@ function uniformGridCandidates(dim,items,height){
 }
 function mixedOrientationCandidates(dim,items,height){
     const box=items[0];
-    if(items.length<2||items.some(item=>item.weight>=8))return [];
+    if(items.length<2||items.some(item=>!canRotateOnSide(item)))return [];
     const sides=[[box.l,box.h,box.p],[box.p,box.h,box.l]]
         .filter(([,,h])=>h!==box.h);
     const candidates=[];
@@ -1546,7 +1549,7 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
     else if(allowFlatBase)candidates.push(...flatBaseCandidates(dim,items,groups,height));
     if(allowSmallFace&&groups.size>1){
         for(const {box,count} of groups.values()){
-            if(count<2||box.weight>=8)continue;
+            if(count<2||!canRotateOnSide(box))continue;
             const own=items.filter(item=>boxFormat(item)===boxFormat(box));
             const other=items.filter(item=>boxFormat(item)!==boxFormat(box));
             for(const {p,remaining} of mixedOrientationCandidates(dim,own,height)){
@@ -2197,8 +2200,9 @@ function articleColors(box){
 }
 function manualPositionError(pallet,original,position){
     const moved={...original,...position}, eps=1e-8;
-    if(moved.h!==original.h&&!(moved.weight<8))
-        return 'La rotazione sulla faccia più piccola è disponibile solo sotto 8 kg.';
+    const upright=manifest[moved.kind]||original;
+    if((moved.smallFace||moved.h!==upright.h)&&!canRotateOnSide(moved))
+        return 'La posa sul lato è consentita solo con peso inferiore a 8 kg e lato corto inferiore a 30 cm.';
     if(base+moved.z+moved.h>(pallet.maxHeight??(transport==='air'?140:truckHeight))+eps)
         return 'La scatola supera l’altezza massima della spedizione.';
     if(moved.x < -eps||moved.y < -eps||moved.x+moved.l>pallet.l+eps||moved.y+moved.p>pallet.p+eps)
@@ -2341,7 +2345,7 @@ function drawManual(){
     el('manualRotate').disabled=!box;
     el('manualRotate').setAttribute('aria-pressed',String(pendingOrientation?.type==='horizontal'));
     const sideButton=el('manualSide');
-    sideButton.hidden=!box||!(box.weight<8);
+    sideButton.hidden=!box||(!box.smallFace&&!smallestFace(box));
     sideButton.textContent=box?.smallFace?'Ripristina posa normale':'Appoggia sulla faccia più piccola';
     sideButton.setAttribute('aria-pressed',String(pendingOrientation?.type==='side'));
     el('manualSelected').textContent=box?`${box.id||''} · ${box.name||''} · ${box.l} × ${box.p} × ${box.h} cm`:'Tocca una scatola per selezionarla.';
@@ -2442,7 +2446,7 @@ el('manualRotate').onclick=()=>{
 };
 el('manualSide').onclick=()=>{
     const box=manualDraft.boxes[manualIndex];
-    if(!box||!(box.weight<8))return;
+    if(!box)return;
     if(box.smallFace){
         const original=manifest[box.kind];
         if(original)requestManualRotation('side',{l:original.l,p:original.p,h:original.h,smallFace:false});
@@ -2540,7 +2544,9 @@ function renderAssembly(){
     placed.value=assemblyPick?.placed?assemblyPick.region+':'+assemblyPick.index:'';
     el('assemblyRemove').disabled=!assemblyPick?.placed;
     el('assemblyRotate').disabled=!assemblyPick;
-    el('assemblySide').hidden=!(assemblyPick?.box.weight<8);
+    const pickedBox=assemblyPick?.box;
+    el('assemblySide').hidden=!pickedBox||
+        (!canRotateOnSide(pickedBox)&&pickedBox.h===manifest[pickedBox.kind]?.h);
     el('assemblyOrbit').setAttribute('aria-pressed',String(orbitAssembly));
     el('assemblyAdd').disabled=!assembly?.boxes.length;
     composeCanvas.hidden=!assembly;
@@ -2666,9 +2672,10 @@ el('assemblyRotate').onclick=()=>{
 };
 el('assemblySide').onclick=()=>{
     const box=assemblyPick?.box;
-    if(!box||!(box.weight<8))return;
-    const {l,p,h}=manifest[box.kind];
-    const orientations=[{l,p,h},{l:h,p,h:l},{l,p:h,h:p}]
+    const upright=box&&manifest[box.kind];
+    if(!upright)return;
+    const {l,p,h}=upright;
+    const orientations=(canRotateOnSide(upright)?[{l,p,h},{l:h,p,h:l},{l,p:h,h:p}]:[{l,p,h}])
         .filter((shape,i,values)=>values.findIndex(q=>q.h===shape.h)===i);
     const index=orientations.findIndex(shape=>shape.h===box.h);
     orientAssembly(orientations[(index+1)%orientations.length]);
