@@ -1633,6 +1633,34 @@ function lowerTopBoxes(pallet){
     }
     pallet.height=base+Math.max(...pallet.boxes.map(box=>box.z+box.h));
 }
+function compactUpperLayers(pallet,height){
+    const byKind=new Map();
+    for(const box of pallet.boxes){
+        if(!byKind.has(box.kind))byKind.set(box.kind,[]);
+        byKind.get(box.kind).push(box);
+    }
+    for(const group of byKind.values()){
+        if(group.length<4||group.some(box=>box.smallFace||box.upperPinwheel))continue;
+        const z=Math.min(...group.map(box=>box.z));
+        if(z<=0||group.filter(box=>Math.abs(box.z-z)<1e-8).length>=4)continue;
+        const lower=pallet.boxes.filter(box=>!group.includes(box));
+        // Repack only a complete top group, so no other box loses its supports.
+        if(Math.abs(Math.max(...lower.map(box=>box.z+box.h))-z)>1e-8)continue;
+        const rest={...pallet,boxes:lower,free:[],columns:[],height:base+z,
+            weight:tare+lower.reduce((sum,box)=>sum+box.weight,0),
+            volume:lower.reduce((sum,box)=>sum+box.l*box.p*box.h,0)};
+        const limit=Math.min(height,pallet.height);
+        const pending=placeUpperPinwheels(rest,group,limit);
+        if(pending.length===group.length||!pending.every(box=>placeBox(rest,box,limit,weightLimit,Infinity)))continue;
+        if(firstUpperLayerFill(rest)<=firstUpperLayerFill(pallet)||
+            loadingInversions(rest)>loadingInversions(pallet)+1e-8||
+            stackedHeavyPairs(rest)>stackedHeavyPairs(pallet)||
+            heavyUpperBoxes(rest).length>heavyUpperBoxes(pallet).length)continue;
+        pallet.boxes=rest.boxes;
+        pallet.height=rest.height;
+        return;
+    }
+}
 function planOrder(items,dims,height,balanced,allowFlatBase=false){
     items=items.map(box=>({...box,format:boxFormat(box)}));
     const upright=buildPlan(items,dims,height,false,allowFlatBase);
@@ -1655,7 +1683,10 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
     }
     if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height);
     if(plan)for(const pallet of plan){
-        if(allowFlatBase)lowerTopBoxes(pallet);
+        if(allowFlatBase){
+            lowerTopBoxes(pallet);
+            compactUpperLayers(pallet,height);
+        }
         centerLoad(pallet);
     }
     return plan;
@@ -1863,7 +1894,10 @@ function planWithHeavyLow(items,dims,height){
     const upright=build(false);
     const alternative=allowSide?build(true):null;
     const plan=preferSideRotation(alternative,upright)?alternative:upright;
-    if(plan)for(const pallet of plan)centerLoad(pallet);
+    if(plan)for(const pallet of plan){
+        compactUpperLayers(pallet,height);
+        centerLoad(pallet);
+    }
     return plan;
 }
 function openHeavyReview(compact,lower,height,selected){
