@@ -1699,11 +1699,13 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
             separated.reduce((sum,p)=>sum+articleMix(p),0)<plan.reduce((sum,p)=>sum+articleMix(p),0))plan=separated;
     }
     if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height);
+    const originals=new Map(items.map(box=>[box.kind,box]));
     if(plan)for(const pallet of plan){
         if(allowFlatBase){
             lowerTopBoxes(pallet);
             compactUpperLayers(pallet,height);
         }
+        improveWrapFit(pallet,originals,height,allowFlatBase);
         centerLoad(pallet);
     }
     return plan;
@@ -1727,6 +1729,40 @@ function preferSideRotation(alternative,upright){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
     return maxHeight(upright)-maxHeight(alternative)+1e-8>=minimumRotationHeightGain&&
         inversions(alternative)<=inversions(upright)+1e-8;
+}
+function lateralClearance(pallet){
+    const {boxes}=pallet;
+    const levels=[...new Set(boxes.flatMap(box=>[box.z,box.z+box.h]))].sort((a,b)=>a-b);
+    let clearance=0;
+    for(let i=1;i<levels.length;i++){
+        const bottom=levels[i-1], top=levels[i];
+        const band=boxes.filter(box=>box.z<top&&box.z+box.h>bottom);
+        if(!band.length)continue;
+        const width=Math.max(...band.map(box=>box.x+box.l))-Math.min(...band.map(box=>box.x));
+        const depth=Math.max(...band.map(box=>box.y+box.p))-Math.min(...band.map(box=>box.y));
+        clearance+=(top-bottom)*(Math.max(0,pallet.l-width)+Math.max(0,pallet.p-depth));
+    }
+    return clearance/(levels.at(-1)-levels[0]);
+}
+function improveWrapFit(pallet,originals,height,allowFlatBase){
+    const items=pallet.boxes.map(box=>({...originals.get(box.kind)}));
+    if(!items.some(smallestFace))return;
+    const inversions=loadingInversions(pallet);
+    const stacked=stackedHeavyPairs(pallet);
+    const heavy=heavyUpperBoxes(pallet).length;
+    let clearance=lateralClearance(pallet);
+    let best=pallet;
+    for(const {p,remaining} of palletCandidates([pallet.l,pallet.p],items,height,true,allowFlatBase)){
+        if(remaining.length||p.boxes.length!==items.length||!p.boxes.some(box=>box.smallFace))continue;
+        const candidateClearance=lateralClearance(p);
+        if(candidateClearance>clearance+1e-8||
+            (Math.abs(candidateClearance-clearance)<=1e-8&&(best===pallet||p.height>=best.height)))continue;
+        if(loadingInversions(p)>inversions+1e-8||stackedHeavyPairs(p)>stacked||
+            heavyUpperBoxes(p).length>heavy)continue;
+        best=p;
+        clearance=candidateClearance;
+    }
+    if(best!==pallet)Object.assign(pallet,best);
 }
 function centerLoad(pallet){
     const boxes=pallet.boxes;
@@ -1911,8 +1947,10 @@ function planWithHeavyLow(items,dims,height){
     const upright=build(false);
     const alternative=allowSide?build(true):null;
     const plan=preferSideRotation(alternative,upright)?alternative:upright;
+    const originals=new Map(normalized.map(box=>[box.kind,box]));
     if(plan)for(const pallet of plan){
         compactUpperLayers(pallet,height);
+        improveWrapFit(pallet,originals,height,true);
         centerLoad(pallet);
     }
     return plan;
