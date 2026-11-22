@@ -1886,6 +1886,8 @@ function rebalancePlan(items,out,height){
     const meanWeight=tare+items.reduce((s,b)=>s+b.weight,0)/out.length;
     const sorted=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
     const originalInversions=inversions(out),originalStacking=stacking(out);
+    const largestArea=Math.max(...out.map(p=>p.l*p.p));
+    const smallerPallets=out.flatMap((p,index)=>p.l*p.p<largestArea?[index]:[]);
     let best=out;
     for(const slack of [1.08,1.2,1.5,Infinity]){
         const plan=out.map(p=>({...emptyPallet([p.l,p.p]),allowSmallFace}));
@@ -1895,7 +1897,8 @@ function rebalancePlan(items,out,height){
         const aboveFloor=sorted.filter(box=>!place(box,true));
         if(aboveFloor.every(box=>place(box,false))&&plan.every(p=>p.boxes.length)&&
             spread(plan)+1e-8<spread(best)&&inversions(plan)<=originalInversions+1e-8&&
-            stacking(plan)<=originalStacking)best=plan;
+            stacking(plan)<=originalStacking&&baseLayerDeficit(plan)<=baseLayerDeficit(best)&&
+            smallerPallets.every(index=>plan[index].height<=best[index].height+1e-8))best=plan;
     }
     return best;
 }
