@@ -467,7 +467,7 @@ html,body{background:#fff}
 <dialog id="heavyReviewDialog" class="project-dialog" aria-labelledby="heavyReviewTitle">
 <h2 id="heavyReviewTitle">Colli pesanti sui piani superiori</h2>
 <p id="heavyReviewSummary"></p>
-<p>Il piano con più pedane tiene i colli pesanti più in basso.</p>
+<p id="heavyReviewHelp"></p>
 <div id="heavyReviewChoices" role="group" aria-label="Piani disponibili">
 <button id="reviewCompact" type="button" aria-pressed="true"></button>
 <button id="reviewLower" type="button" aria-pressed="false"></button>
@@ -1837,10 +1837,12 @@ function articleMix(p){
     }
     return [...formats.values()].reduce((sum,kinds)=>sum+kinds.size-1,0);
 }
+function isLighterSupport(box,support){
+    return support.kind!==box.kind&&support.weight<box.weight&&
+        Math.abs(support.z+support.h-box.z)<1e-8&&overlapArea(support,box)>1e-8;
+}
 function heavyUpperBoxes(pallet){
-    return pallet.boxes.filter(box=>box.z>0&&pallet.boxes.some(support=>
-        support.kind!==box.kind&&support.weight<box.weight&&
-        Math.abs(support.z+support.h-box.z)<1e-8&&overlapArea(support,box)>1e-8));
+    return pallet.boxes.filter(box=>box.z>0&&pallet.boxes.some(support=>isLighterSupport(box,support)));
 }
 function stackedHeavyPairs(pallet){
     const heavyKinds=new Set(heavyUpperBoxes(pallet).map(box=>box.kind));
@@ -1933,11 +1935,8 @@ function calculateOrder(selected=0){
     if(!planned){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
     if(mode==='auto'&&planned.some(p=>heavyUpperBoxes(p).length)){
         const lower=planWithHeavyLow(items,dims,height);
-        if(lower&&lower.length<=planned.length)planned=lower;
-        else if(lower){
-            openHeavyReview(planned,lower,height,selected);
-            return;
-        }
+        openHeavyReview(planned,lower,height,selected);
+        return;
     }
     for(const pallet of planned)pallet.maxHeight=height;
     publishProject([...composedPallets,...planned],selected);
@@ -1960,7 +1959,7 @@ function planWithHeavyLow(items,dims,height){
 }
 function openHeavyReview(compact,lower,height,selected){
     const dialog=el('heavyReviewDialog');
-    const plans=[compact,lower].map(plan=>{
+    const plans=(lower?[compact,lower]:[compact]).map(plan=>{
         for(const pallet of plan)pallet.maxHeight=height;
         return [...composedPallets,...plan];
     });
@@ -1968,15 +1967,29 @@ function openHeavyReview(compact,lower,height,selected){
         const boxes=heavyUpperBoxes(p);
         if(!boxes.length)return [];
         const number=composedPallets.length+index+1;
-        return ['Pedana '+number+' — '+boxes.length+' colli in alto, '+boxes.reduce((sum,box)=>sum+box.weight,0).toLocaleString('it-IT')+' kg complessivi'];
+        const label=box=>box.id+' ('+box.weight.toLocaleString('it-IT')+' kg)';
+        const pairs=new Map();
+        for(const box of boxes){
+            const supports=[...new Set(p.boxes.filter(support=>isLighterSupport(box,support)).map(label))].sort();
+            const description=label(box)+' sopra '+supports.join(', ');
+            pairs.set(description,(pairs.get(description)||0)+1);
+        }
+        return ['Pedana '+number+' · H '+p.height+' cm — '+[...pairs].map(([pair,count])=>count+' × '+pair).join('; ')];
     });
     el('heavyReviewSummary').textContent=summary.join(' · ');
-    const buttons=[el('reviewCompact'),el('reviewLower')];
+    el('heavyReviewHelp').textContent=lower
+        ? 'Confronta le due disposizioni e verifica che i colli di appoggio possano sostenere il peso.'
+        : 'Il motore non ha trovato un piano alternativo. Puoi annullare o confermare dopo aver verificato gli appoggi.';
+    const lowerButton=el('reviewLower');
+    lowerButton.hidden=!lower;
+    const buttons=lower?[el('reviewCompact'),lowerButton]:[el('reviewCompact')];
+    const confirm=el('reviewConfirm');
     const select=el('reviewPallet');
     let choice=0;
     const preview=()=>draw(el('reviewCanvas'),plans[choice][Number(select.value)],false);
     function choose(index){
         choice=index;
+        confirm.textContent=index===0?'Conferma con colli più pesanti sopra':'Conferma con colli più pesanti in basso';
         buttons.forEach((button,i)=>button.setAttribute('aria-pressed',String(i===index)));
         select.replaceChildren(...plans[index].map((p,i)=>
             new Option('Pedana '+(i+1)+' · '+p.l+' × '+p.p+' cm · H '+p.height+' cm',String(i))));
@@ -1984,11 +1997,16 @@ function openHeavyReview(compact,lower,height,selected){
         select.selectedIndex=index===0?composedPallets.length+affected:composedPallets.length;
         preview();
     }
-    buttons[0].textContent='Vedi piano da '+plans[0].length+' pedane';
-    buttons[1].textContent='Vedi piano da '+plans[1].length+' pedane';
+    const planLabel=plan=>{
+        const count=plan.length===1?'1 pedana':plan.length+' pedane';
+        const area=(totalPalletArea(plan)/10000).toLocaleString('it-IT',{maximumFractionDigits:4});
+        return count+' · '+area+' m²';
+    };
+    buttons[0].textContent='Colli più pesanti sopra · '+planLabel(plans[0]);
+    if(lower)lowerButton.textContent='Colli più pesanti in basso · '+planLabel(plans[1]);
     buttons.forEach((button,i)=>button.onclick=()=>choose(i));
     select.onchange=preview;
-    el('reviewConfirm').onclick=()=>{
+    confirm.onclick=()=>{
         dialog.close();
         publishProject(plans[choice],Math.min(selected,plans[choice].length-1));
     };
