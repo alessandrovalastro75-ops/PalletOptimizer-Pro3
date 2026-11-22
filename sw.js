@@ -1,6 +1,6 @@
 const scope = self.registration.scope;
 const prefix = 'palletoptimizer:' + scope + ':';
-const cacheName = prefix + '27be40888229af50';
+const cacheName = prefix + 'c7220f87cd3688ea';
 const files = ['index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 const urls = files.map(file => new URL(file, scope).href);
 const home = urls[0];

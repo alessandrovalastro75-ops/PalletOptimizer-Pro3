@@ -396,7 +396,23 @@ html,body{background:#fff}
     });
 })();
 </script>
-</head><body>
+<style>
+body.pin-locked{overflow:hidden}
+body.pin-locked > :not(#startupPin){visibility:hidden!important}
+#startupPin{position:fixed;inset:0;margin:auto;box-sizing:border-box;width:min(92vw,480px);max-height:90dvh;overflow:auto;padding:clamp(20px,5vw,32px);border:1px solid #f3c45c;border-radius:22px;background:linear-gradient(145deg,#142441,#071122);color:#f6f7fc;box-shadow:0 18px 60px #020610}
+#startupPin::backdrop{background:radial-gradient(ellipse at top,#12294b,#050b17 75%)}
+#startupPin h2{color:inherit;text-align:center;margin:0;font-size:clamp(1.3rem,5vw,2rem)}
+#startupPin h2 b{color:#ffc95b}
+#startupPin p{text-align:center;margin:12px 0}
+#startupPin label{display:block;font-weight:650;margin:14px 0 6px}
+#startupPin .pin-field{position:relative}
+#startupPin input{box-sizing:border-box;width:100%;background:#0b172c;color:white;border:1px solid #bdcbe3;border-radius:12px;padding:12px 58px 12px 12px;font:inherit}
+#startupPin .pin-eye{position:absolute;right:4px;top:3px;bottom:3px;padding:0 10px;border:0;background:none;color:white}
+#startupPin .pin-go{width:100%;border:1px solid #ffdc87;border-radius:12px;padding:12px;background:linear-gradient(#ffda7d,#d99a30);color:#111827;font-weight:750}
+#startupPin #startupPinStatus{min-height:1.2em;color:#ffdb90}
+@media print{body.pin-locked > *{display:none!important}}
+</style>
+</head><body class="pin-locked">
 <header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
@@ -3387,5 +3403,46 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
         console.warn('Cache offline non disponibile', error);
     });
 }
+</script>
+<dialog id="startupPin" aria-labelledby="startupPinTitle">
+<form id="startupPinForm">
+<h2 id="startupPinTitle">PalletOptimizer <b>Pro</b></h2>
+<p>Inserisci il PIN per aprire l’app.</p>
+<label for="startupPinInput">PIN di avvio</label>
+<div class="pin-field"><input type="password" id="startupPinInput" inputmode="numeric" autocomplete="off" required autofocus>
+<button class="pin-eye" type="button" aria-label="Mostra PIN" aria-pressed="false"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.5"/></svg></button></div>
+<p id="startupPinStatus" role="status"></p>
+<button class="pin-go" type="submit">Continua</button>
+</form>
+</dialog>
+<script>
+(() => {
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
+    const dialog = document.getElementById('startupPin');
+    const form = document.getElementById('startupPinForm');
+    const input = document.getElementById('startupPinInput');
+    const status = document.getElementById('startupPinStatus');
+    const eye = dialog.querySelector('.pin-eye');
+    dialog.addEventListener('cancel', event => event.preventDefault());
+    eye.addEventListener('click', () => {
+        const visible = input.type === 'password';
+        input.type = visible ? 'text' : 'password';
+        eye.setAttribute('aria-pressed', String(visible));
+        eye.setAttribute('aria-label', visible ? 'Nascondi PIN' : 'Mostra PIN');
+    });
+    form.addEventListener('submit', event => {
+        event.preventDefault();
+        if (input.value.trim() !== PIN_AVVIO) {
+            status.textContent = 'PIN errato. Riprova.';
+            input.focus();
+            input.select();
+            return;
+        }
+        form.reset();
+        dialog.close();
+        document.body.classList.remove('pin-locked');
+    });
+    dialog.showModal();
+})();
 </script>
 </body></html>
