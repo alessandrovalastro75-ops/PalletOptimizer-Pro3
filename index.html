@@ -414,6 +414,14 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 #startupPin #startupPinStatus{min-height:1.2em;color:#ffdb90}
 @media print{body.pin-locked > *{display:none!important}}
 </style>
+<style>
+.shipment-weights{grid-column:1/-1}
+.shipment-weights .weight-total,.shipment-weights dl>div{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.shipment-weights .weight-total{margin:8px 0}
+.shipment-weights dl{margin:0}
+.shipment-weights dl>div{padding:6px 0;border-top:1px solid #71819a55}
+.shipment-weights dd{margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+</style>
 </head><body class="pin-locked">
 <header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav></header>
 <main class="dashboard">
@@ -453,6 +461,11 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 </section>
 <section class="panel padded metrics"><h3>📊 &nbsp; Risultati</h3><p id="status">In attesa del calcolo</p><div class="stats"><div><strong id="volume">—</strong>Utilizzo volume</div><div><strong id="boxes">—</strong>Scatole</div><div><strong id="layers">—</strong>Strati</div></div><p class="shipment-volume">Volume finale <strong id="shipmentVolume">—</strong></p></section>
 <section class="panel padded loads"><h3>⚖ &nbsp; Riepilogo Carichi</h3><div class="stats"><div>Sinistra<strong id="leftLoad">—</strong></div><div>Destra<strong id="rightLoad">—</strong></div></div></section>
+<section class="panel padded shipment-weights" aria-labelledby="shipmentWeightsTitle">
+<h3 id="shipmentWeightsTitle">Peso delle pedane</h3>
+<p class="weight-total"><span>Peso lordo totale</span><strong id="shipmentWeightTotal">—</strong></p>
+<dl id="shipmentWeightList"></dl>
+</section>
 <section class="panel action"><button onclick="calculateOrder()">▶ <span>Calcola<br>Ottimizzazione</span></button></section>
 </main>
 <dialog id="productDialog" aria-labelledby="productTitle">
@@ -488,6 +501,8 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <p id="heavyReviewHelp"></p>
 <div id="heavyReviewChoices" role="group" aria-label="Piani disponibili">
 <button id="reviewCompact" type="button" aria-pressed="true"></button>
+<button id="reviewCompactFewer" type="button" aria-pressed="false" hidden></button>
+<button id="reviewLowerFewer" type="button" aria-pressed="false" hidden></button>
 <button id="reviewShorter" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLower" type="button" aria-pressed="false"></button>
 </div>
@@ -1593,7 +1608,62 @@ function palletCandidates(dim, items, height, allowSmallFace=false, allowFlatBas
         }
     }
     if(layered&&groups.size>1)candidates.push(...layeredCandidates(dim,items,groups,height,allowSmallFace));
+    if(allowFlatBase&&groups.size>1){
+        const completed=candidates.map(candidate=>repackTopLayer(candidate,height)).filter(Boolean);
+        candidates.push(...completed);
+    }
     return candidates;
+}
+function repackTopLayer(candidate,height){
+    const {p,remaining}=candidate;
+    if(!remaining.length||remaining.length>4||!p.boxes.length)return null;
+    const z=Math.max(...p.boxes.map(box=>box.z));
+    if(z===0)return null;
+    const fixed=p.boxes.filter(box=>box.z<z);
+    if(fixed.some(box=>box.z+box.h>z+1e-8))return null;
+    const top=p.boxes.filter(box=>box.z===z);
+    const boxes=[...top,...remaining].sort((a,b)=>b.l*b.p-a.l*a.p);
+    if(boxes.length>6||new Set(boxes.map(boxFormat)).size<2||
+        boxes.some(box=>base+z+box.h>height)||
+        p.weight+remaining.reduce((sum,box)=>sum+box.weight,0)>weightLimit)return null;
+    const supports=fixed.filter(box=>Math.abs(box.z+box.h-z)<1e-8);
+    if(!supports.length)return null;
+    const left=Math.min(...supports.map(box=>box.x)),right=Math.max(...supports.map(box=>box.x+box.l));
+    const front=Math.min(...supports.map(box=>box.y)),back=Math.max(...supports.map(box=>box.y+box.p));
+    const area=(right-left)*(back-front);
+    if(Math.abs(supports.reduce((sum,box)=>sum+box.l*box.p,0)-area)>1e-8||
+        boxes.reduce((sum,box)=>sum+box.l*box.p,0)>area+1e-8)return null;
+
+    const trial={...p,boxes:[...fixed],columns:[],free:[]};
+    if(boxes.some(box=>!canUseLayer(trial,box,z)))return null;
+    const placed=[];
+    let attempts=0;
+    function fit(index){
+        if(index===boxes.length)return true;
+        const box=boxes[index];
+        for(const [l,d] of box.l===box.p?[[box.l,box.p]]:[[box.l,box.p],[box.p,box.l]]){
+            const xs=new Set([left,right-l,...placed.flatMap(peer=>[peer.x+peer.l,peer.x-l])]);
+            const ys=new Set([front,back-d,...placed.flatMap(peer=>[peer.y+peer.p,peer.y-d])]);
+            for(const x of xs)for(const y of ys){
+                if(++attempts>1000)return false;
+                if(x<left-1e-8||x+l>right+1e-8||y<front-1e-8||y+d>back+1e-8)continue;
+                const spot={...box,x,y,z,l,p:d};
+                if(placed.some(peer=>overlapArea(spot,peer)>1e-8)||
+                    fixed.some(support=>boxFormat(support)===boxFormat(box)&&
+                        support.weight<box.weight&&overlapArea(spot,support)>1e-8))continue;
+                placed.push(spot);
+                if(fit(index+1))return true;
+                placed.pop();
+            }
+        }
+        return false;
+    }
+    if(!fit(0))return null;
+    trial.boxes.push(...placed);
+    trial.weight=p.weight+remaining.reduce((sum,box)=>sum+box.weight,0);
+    trial.volume=p.volume+remaining.reduce((sum,box)=>sum+box.l*box.p*box.h,0);
+    trial.height=base+z+Math.max(...placed.map(box=>box.h));
+    return {...candidate,p:trial,remaining:[],uneven:unevenLayers(trial)};
 }
 function unevenLayers(p){
     const groups=new Map();
@@ -1950,12 +2020,35 @@ function calculateOrder(selected=0){
         !Number.isInteger(b.maxLayers)||b.maxLayers<1||b.weight+tare>weightLimit||![b,smallestFace(b)].some(shape=>shape&&shape.h+base<=height&&dims.some(([l,p])=>fits(shape,l,p))));
     if(invalid){alert('Il prodotto '+invalid.id+' non rientra nei limiti o ha dati incompleti.');return;}
     const items=remaining.flatMap(b=>Array.from({length:b.qty},()=>({...b})));
-    let planned=planOrder(items,dims,height,mode==='auto'&&el('balanceWeight').checked,mode==='auto');
-    if(!planned){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
-    if(mode==='auto'&&planned.some(p=>heavyUpperBoxes(p).length)){
-        const lower=planWithHeavyLow(items,dims,height);
-        const shorter=lower&&findShorterHeavyPlan(items,dims,height,planned,lower);
-        openHeavyReview(planned,shorter,lower,height,selected);
+    const automatic=mode==='auto';
+    const balanced=automatic&&el('balanceWeight').checked;
+    const initial=planOrder(items,dims,height,balanced,automatic);
+    if(!initial){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
+    let heavy=hasHeavyUpperBoxes(initial);
+    const findPlan=formats=>planOrder(items,formats,height,balanced,automatic);
+    let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy);
+    const initialCompact=compact;
+    const compare=automatic?(a,b)=>compareGlobalShipments(a,b,balanced):comparePalletSurface;
+    if(automatic&&compact.minimum.length>1){
+        const global=searchShipmentLayouts(items,dims,height,compact,false,compare);
+        compact=rankShipmentChoices([compact.minimum,compact.fewer,...global].filter(Boolean),compare);
+        heavy=hasHeavyUpperBoxes(compact.minimum)||Boolean(compact.fewer&&hasHeavyUpperBoxes(compact.fewer));
+    }
+    const planned=compact.minimum;
+    let lower=heavy?shipmentChoices(planWithHeavyLow(items,dims,height),items,dims,height,
+        formats=>planWithHeavyLow(items,formats,height),false,true):null;
+    if(automatic&&heavy){
+        const safe=[lower?.minimum,lower?.fewer,initialCompact.minimum,initialCompact.fewer]
+            .filter(plan=>plan&&!hasHeavyUpperBoxes(plan));
+        if(safe.length){
+            lower=rankShipmentChoices(safe,compare);
+            const global=searchShipmentLayouts(items,dims,height,lower,true,compare);
+            lower=rankShipmentChoices([...safe,...global],compare);
+        }
+    }
+    if(heavy||compact.fewer){
+        const shorter=lower?.minimum&&findShorterHeavyPlan(items,dims,height,planned,lower.minimum);
+        openShipmentReview(compact,shorter,lower,heavy,height,selected);
         return;
     }
     for(const pallet of planned)pallet.maxHeight=height;
@@ -1977,6 +2070,121 @@ function planWithHeavyLow(items,dims,height){
     }
     return plan;
 }
+const palletAreaTolerance=0.05;
+function hasHeavyUpperBoxes(plan){
+    return plan.some(pallet=>heavyUpperBoxes(pallet).length);
+}
+function separateArticlesPlan(items,dims,height){
+    const groups=new Map();
+    for(const box of items){
+        if(!groups.has(box.kind))groups.set(box.kind,[]);
+        groups.get(box.kind).push(box);
+    }
+    if(groups.size<2)return null;
+    const result=[];
+    for(const group of groups.values()){
+        const plans=dims.map(dim=>planOrder(group,[dim],height,false,true)).filter(Boolean);
+        plans.sort((a,b)=>a.length-b.length||comparePalletSurface(a,b));
+        if(!plans.length)return null;
+        result.push(...plans[0]);
+    }
+    return result;
+}
+function shipmentChoices(initial,items,dims,height,findPlan,heavy,preserveSeparation=false){
+    const separated=plan=>plan.every(pallet=>pallet.boxes.every(box=>box.kind===pallet.boxes[0].kind));
+    const keepSeparate=preserveSeparation&&initial&&separated(initial);
+    const candidates=[initial].filter(Boolean);
+    if(!initial||initial.length>1){
+        const formatOptions=dims.flatMap((dim,index)=>[
+            [dim],...dims.slice(index+1).map(other=>[dim,other])
+        ]);
+        for(const formats of formatOptions){
+            if(formats.length===dims.length)continue;
+            const plan=findPlan(formats);
+            if(plan&&hasHeavyUpperBoxes(plan)===heavy&&(!keepSeparate||separated(plan)))candidates.push(plan);
+        }
+        if(!heavy){
+            const byArticle=separateArticlesPlan(items,dims,height);
+            if(byArticle)candidates.push(byArticle);
+        }
+    }
+    return rankShipmentChoices(candidates);
+}
+function rankShipmentChoices(candidates,compare=comparePalletSurface){
+    candidates.sort(compare);
+    const minimum=candidates[0];
+    if(!minimum)return {minimum};
+    const area=totalPalletArea(minimum);
+    const projectArea=area+totalPalletArea(composedPallets);
+    const comparable=candidates.filter(plan=>plan.length<minimum.length&&
+        totalPalletArea(plan)-area<=projectArea*palletAreaTolerance+1e-8);
+    comparable.sort((a,b)=>a.length-b.length||compare(a,b));
+    return {minimum,fewer:comparable[0]};
+}
+function compareGlobalShipments(a,b,balanced){
+    const spread=plan=>Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
+    return comparePalletSurface(a,b)||
+        Number(hasHeavyUpperBoxes(a))-Number(hasHeavyUpperBoxes(b))||
+        (balanced?spread(a)-spread(b):0)||compareShipments(a,b);
+}
+// Explore complete shipments while retaining several ways to allocate the remaining cartons.
+function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare){
+    const maxStates=12;
+    const maxDepth=Math.min(reference.minimum.length,6);
+    if(maxDepth<2||items.length>120||new Set(items.map(box=>box.kind)).size>12)return [];
+    const minimumArea=Math.min(...dims.map(([l,p])=>l*p));
+    const maxArea=totalPalletArea(reference.minimum)*(1+palletAreaTolerance)+
+        totalPalletArea(composedPallets)*palletAreaTolerance;
+    const requiredVolume=pending=>pending.reduce((sum,b)=>sum+b.l*b.p*b.h,0);
+    const normalized=items.map(box=>({...box,format:boxFormat(box)}));
+    const byArea=(a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight;
+    const allowSide=normalized.some(smallestFace);
+    const complete=new Map();
+    let states=[{pending:normalized,plan:[],area:0}];
+    for(let depth=1;depth<=maxDepth&&states.length;depth++){
+        const next=new Map();
+        for(const {pending,plan,area} of states){
+            const largestFirst=[...pending].sort(byArea);
+            const heavyFirst=[...pending].sort((a,b)=>b.weight-a.weight||byArea(a,b));
+            const orders=[largestFirst];
+            if(heavyFirst.some((box,index)=>box.kind!==largestFirst[index].kind))orders.push(heavyFirst);
+            for(const dim of dims){
+                const footprint=dim[0]*dim[1];
+                if(area+footprint>maxArea+1e-8)continue;
+                for(const order of orders){
+                    const candidates=palletCandidates(dim,order,height,allowSide,true,true);
+                    for(const {p,remaining} of candidates){
+                        if(!p.boxes.length||keepHeavyLow&&heavyUpperBoxes(p).length)continue;
+                        const usedArea=area+footprint;
+                        const trial=[...plan,p];
+                        if(!remaining.length){
+                            const best=complete.get(depth);
+                            if(!best||compare(trial,best)<0)complete.set(depth,trial);
+                            continue;
+                        }
+                        if(depth===maxDepth)continue;
+                        const estimate=usedArea+Math.max(minimumArea,requiredVolume(remaining)/(height-base));
+                        if(estimate>maxArea+1e-8)continue;
+                        const counts=new Map();
+                        for(const box of remaining)counts.set(box.kind,(counts.get(box.kind)||0)+1);
+                        const key=JSON.stringify([...counts].sort(([a],[b])=>a-b));
+                        const best=next.get(key);
+                        if(!best||compare(trial,best.plan)<0)next.set(key,{
+                            pending:remaining,plan:trial,area:usedArea,estimate
+                        });
+                    }
+                }
+            }
+        }
+        states=[...next.values()].sort((a,b)=>a.estimate-b.estimate||
+            a.pending.length-b.pending.length||compare(a.plan,b.plan)).slice(0,maxStates);
+    }
+    return [...complete.values()].map(plan=>plan.map(p=>{
+        const copy={...p,boxes:p.boxes.map(box=>({...box}))};
+        centerLoad(copy);
+        return copy;
+    }));
+}
 function tallestPallet(plan){
     return Math.max(...plan.map(pallet=>pallet.height));
 }
@@ -1993,12 +2201,14 @@ function findShorterHeavyPlan(items,dims,height,compact,lower){
     candidates.sort((a,b)=>tallestPallet(a)-tallestPallet(b)||comparePalletSurface(a,b));
     return candidates[0];
 }
-function openHeavyReview(compact,shorter,lower,height,selected){
+function openShipmentReview(compact,shorter,lower,heavy,height,selected){
     const dialog=el('heavyReviewDialog');
     const options=[
-        {plan:compact,button:el('reviewCompact'),label:'Superficie minima'},
+        {plan:compact.fewer,reference:compact.minimum,button:el('reviewCompactFewer'),label:'Consigliata · meno pedane'},
+        {plan:compact.minimum,button:el('reviewCompact'),label:'Superficie minima'},
         {plan:shorter,button:el('reviewShorter'),label:'Altezza ridotta'},
-        {plan:lower,button:el('reviewLower'),label:'Colli più pesanti in basso'}
+        {plan:lower?.fewer,reference:lower?.minimum,button:el('reviewLowerFewer'),label:'Colli pesanti in basso · consigliata'},
+        {plan:lower?.minimum,button:el('reviewLower'),label:'Colli pesanti in basso · superficie minima'}
     ].filter(option=>{
         option.button.hidden=!option.plan;
         return option.plan;
@@ -2020,9 +2230,10 @@ function openHeavyReview(compact,shorter,lower,height,selected){
         }
         return ['Pedana '+number+' · H '+p.height+' cm — '+[...pairs].map(([pair,count])=>count+' × '+pair).join('; ')];
     }).join(' · ');
-    el('heavyReviewHelp').textContent=lower
+    el('heavyReviewTitle').textContent=heavy?'Colli pesanti sui piani superiori':'Scegli la disposizione';
+    el('heavyReviewHelp').textContent=heavy
         ? 'Confronta le disposizioni e verifica che i colli di appoggio possano sostenere il peso.'
-        : 'Il motore non ha trovato un piano alternativo. Puoi annullare o confermare dopo aver verificato gli appoggi.';
+        : 'La proposta con meno pedane rientra nel 5% di superficie in più rispetto alla superficie minima.';
     const confirm=el('reviewConfirm');
     const select=el('reviewPallet');
     let choice=0;
@@ -2031,7 +2242,7 @@ function openHeavyReview(compact,shorter,lower,height,selected){
         choice=index;
         const summary=summarize(options[index].plan);
         el('heavyReviewSummary').textContent=summary;
-        confirm.textContent=summary?'Conferma con colli più pesanti sopra':'Conferma con colli più pesanti in basso';
+        confirm.textContent=summary?'Conferma con colli più pesanti sopra':'Conferma piano selezionato';
         options.forEach(({button},i)=>button.setAttribute('aria-pressed',String(i===index)));
         select.replaceChildren(...plans[index].map((p,i)=>
             new Option('Pedana '+(i+1)+' · '+p.l+' × '+p.p+' cm · H '+p.height+' cm',String(i))));
@@ -2044,8 +2255,11 @@ function openHeavyReview(compact,shorter,lower,height,selected){
         const area=(totalPalletArea(plan)/10000).toLocaleString('it-IT',{maximumFractionDigits:4});
         return count+' · '+area+' m² · H max '+tallestPallet(plan)+' cm';
     };
-    options.forEach(({button,label},i)=>{
-        button.textContent=label+' · '+planLabel(plans[i]);
+    options.forEach(({button,label,reference,plan},i)=>{
+        const baseline=reference&&totalPalletArea(reference)+totalPalletArea(composedPallets);
+        const extra=baseline?(totalPalletArea(plan)-totalPalletArea(reference))/baseline:0;
+        const difference=extra>0?' · +'+extra.toLocaleString('it-IT',{style:'percent',maximumFractionDigits:2}):'';
+        button.textContent=label+' · '+planLabel(plans[i])+difference;
         button.onclick=()=>choose(i);
     });
     select.onchange=preview;
@@ -2228,7 +2442,23 @@ function shipmentVolume(project){
 function formatVolume(volume){
     return volume.toLocaleString('it-IT',{minimumFractionDigits:3,maximumFractionDigits:3})+' m³';
 }
+const palletWeightFormat=new Intl.NumberFormat('it-IT',{maximumFractionDigits:2});
+function renderShipmentWeights(project){
+    const format=weight=>palletWeightFormat.format(weight)+' kg';
+    el('shipmentWeightTotal').textContent=project.length
+        ?format(project.reduce((total,pallet)=>total+pallet.weight,0)):'—';
+    el('shipmentWeightList').replaceChildren(...project.map((pallet,index)=>{
+        const row=document.createElement('div');
+        const label=document.createElement('dt');
+        const weight=document.createElement('dd');
+        label.textContent='Pedana '+(index+1)+' · '+pallet.l+' × '+pallet.p+' cm';
+        weight.textContent=format(pallet.weight);
+        row.append(label,weight);
+        return row;
+    }));
+}
 function renderViewer(){
+    renderShipmentWeights(pallets);
     el('shipmentVolume').textContent=pallets.length
         ? formatVolume(shipmentVolume(pallets)) : '—';
     const p=pallets[active];
@@ -3420,7 +3650,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
