@@ -25,6 +25,12 @@ h2{color:var(--gold);font-size:clamp(17px,1.9vw,28px);line-height:1.15}h2 i{font
 @media(max-width:950px){.top{flex-wrap:wrap}.form-grid{gap:8px}.dashboard{grid-template-columns:1.6fr 1fr 1fr}.seg button{padding-inline:6px}}
 @media(max-width:720px){.dashboard{grid-template-columns:1fr 1fr;grid-template-areas:'order order' 'controls controls' 'viewer viewer' 'metrics loads' 'action action';padding:10px}.commessa{grid-template-columns:1fr 1fr}.commessa>div{grid-column:1/-1}.top{padding:12px;gap:12px}nav{flex-wrap:wrap}.brand{gap:10px}.brand svg{width:38px}.brand p{font-size:12px}.view-switch button{padding-inline:9px}}
 @media(max-width:360px){.form-grid{grid-template-columns:1fr}.stats{flex-wrap:wrap}}
+.dashboard .action{flex-direction:column;gap:8px}
+.dashboard #calculateOptimization:disabled{cursor:wait}
+#optimizationFeedback{padding:4px 3px}
+.optimization-heading{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font-size:.9rem}
+#optimizationPercent{font-variant-numeric:tabular-nums}
+#optimizationProgress{display:block;width:100%;height:16px;margin-top:4px;accent-color:#298254}
 </style><style>
 .options{margin-top:12px}.options button{white-space:nowrap}.height-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:12px}.height-row small{color:#c3cfe3}.height-picker{position:relative}.height-picker button{min-width:90px}.height-picker #heightOptions{position:absolute;z-index:10;top:100%;left:0;width:235px;max-width:70vw;background:#0b172b;border:1px solid #50658a;border-radius:12px;padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;box-shadow:0 12px 30px #0009}
 [hidden]{display:none!important}
@@ -195,7 +201,7 @@ html,body{background:#fff}
     #showDetails { color: #fff5d8 !important; }
 
     .dashboard input, #productDialog input, #manualDialog select,
-    .project-dialog input, #heavyReviewDialog select,
+    .project-dialog input, #savedProjectSelect, #heavyReviewDialog select,
     #catalogModalBody input, #composeDialog input, #composeDialog select {
         color-scheme: light;
         background: var(--field);
@@ -334,7 +340,7 @@ html,body{background:#fff}
         box-shadow: inset 0 1px 0 #fff, 0 7px 20px #03091132;
     }
     .dashboard input, #productDialog input, #manualDialog select,
-    .project-dialog input, #heavyReviewDialog select,
+    .project-dialog input, #savedProjectSelect, #heavyReviewDialog select,
     #catalogModalBody input, #composeDialog input, #composeDialog select {
         background: var(--recess);
         box-shadow: inset 0 2px 4px #29496724, 0 1px 0 #fff;
@@ -422,7 +428,10 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 .shipment-weights dl>div{padding:6px 0;border-top:1px solid #71819a55}
 .shipment-weights dd{margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
 </style>
-<style>.tariff-controls{display:grid;gap:8px;margin-top:12px}.tariff-controls label{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}.tariff-controls input{width:128px}.tariff-controls select,.tariff-controls input{max-width:100%}</style><style>.saved-project-actions{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.saved-project-actions button{min-width:0;overflow-wrap:anywhere}</style></head><body class="pin-locked">
+<style>.tariff-controls{display:grid;gap:8px;margin-top:12px}.tariff-controls label{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}.tariff-controls input{width:128px}.tariff-controls select,.tariff-controls input{max-width:100%}</style><style>.saved-project-actions{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.saved-project-actions button{min-width:0;overflow-wrap:anywhere}
+#savedProjectSelect{display:block;width:100%;margin:6px 0 10px;padding:10px;border:1px solid #527297;border-radius:7px;background:#081325;color:white;color-scheme:dark;font:inherit}
+#savedProjectStatus{margin:6px 0}
+#savedProjectStatus:empty{display:none}</style></head><body class="pin-locked">
 <header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><button type="button" onclick="emailShipmentReport()">Invia report via email</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
@@ -472,7 +481,16 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <p class="weight-total"><span>Peso lordo totale</span><strong id="shipmentWeightTotal">—</strong></p><p class="weight-total"><span>Peso volumetrico</span><strong id="shipmentVolumetricWeight">—</strong></p>
 <dl id="shipmentWeightList"></dl>
 </section>
-<section class="panel action"><button onclick="calculateOrder()">▶ <span>Calcola<br>Ottimizzazione</span></button></section>
+<section class="panel action">
+    <button id="calculateOptimization" type="button" onclick="calculateOrder()">▶ <span>Calcola<br>Ottimizzazione</span></button>
+    <div id="optimizationFeedback" hidden>
+        <div class="optimization-heading">
+            <span id="optimizationStage" role="status"></span>
+            <strong id="optimizationPercent" aria-hidden="true"></strong>
+        </div>
+        <progress id="optimizationProgress" max="100" aria-label="Avanzamento stimato dell’ottimizzazione"></progress>
+    </div>
+</section>
 </main>
 <dialog id="productDialog" aria-labelledby="productTitle">
 <form method="dialog"><button aria-label="Chiudi selezione articoli">✕</button></form>
@@ -558,9 +576,17 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <button type="button" id="cancelProjectSave">Annulla</button>
 </form>
 </dialog>
-<dialog id="projectOpenDialog" class="project-dialog">
+<dialog id="projectOpenDialog" class="project-dialog" aria-labelledby="projectOpenTitle">
 <form method="dialog"><button aria-label="Chiudi">✕</button></form>
-<h2>Apri progetto</h2><div id="savedProjectList"></div>
+<h2 id="projectOpenTitle">Apri progetto</h2>
+<label for="savedProjectSelect">Progetto salvato</label>
+<select id="savedProjectSelect"></select>
+<div id="savedProjectActions" class="saved-project-actions" hidden>
+    <button type="button" id="openSavedProject">Apri</button>
+    <button type="button" id="deleteSavedProject">Cancella</button>
+    <button type="button" id="emailSavedProject">Invia progetto via mail</button>
+</div>
+<p id="savedProjectStatus" role="status"></p>
 <button type="button" id="importProjectFile">Importa file JSON</button>
 <button type="button" id="openCloudProjects">Archivio online</button>
 </dialog>
@@ -1059,74 +1085,8 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
             }).catch(()=>shareAppCode());
         }
     </script>
-<script>const el=id=>document.getElementById(id);
-const formats=[[114,114],[80,120],[60,80],[80,80]];
-const heights=[150,160,170,180,190,200,210,220];
+<script id="shipmentEngine">
 const tare=22, base=10, weightLimit=750;
-const manual=new Set();
-let transport='air', truckHeight=180, mode='auto', pallets=[], active=0, flat=false;
-let yaw=-.65,pitch=.56,drag;
-const canvas=el('palletCanvas');
-function icon(height){
-    const y=25-18*(height-140)/80;
-    return '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 27H29" stroke="#e0a63c" stroke-width="3"/><rect x="7" y="'+y+'" width="18" height="'+(25-y)+'" rx="2" fill="#e0a63c"/><path d="M29 '+y+'V25" stroke="currentColor"/></svg>';
-}
-function press(container,attribute,value){
-    for(const b of container.querySelectorAll('button')){
-        const selected=b.dataset[attribute]===value;
-        b.classList.toggle('gold',selected);
-        b.setAttribute('aria-pressed',selected);
-    }
-}
-el('heightOptions').innerHTML=heights.map(h=>'<button class="height-option" data-height="'+h+'">'+icon(h)+'<span>'+h+' cm</span></button>').join('');
-function heightDisplay(){
-    el('heightToggle').innerHTML='<span class="height-option">'+icon(truckHeight)+truckHeight+' cm ▾</span>';
-    el('heightOptions').hidden=true;
-    el('heightToggle').setAttribute('aria-expanded','false');
-}
-heightDisplay();
-el('heightToggle').onclick=()=>{
-    el('heightOptions').hidden=!el('heightOptions').hidden;
-    el('heightToggle').setAttribute('aria-expanded',!el('heightOptions').hidden);
-};
-el('heightOptions').onclick=e=>{
-    const b=e.target.closest('[data-height]');
-    if(b){truckHeight=Number(b.dataset.height);heightDisplay();el('heightToggle').focus();}
-};
-document.addEventListener('click',e=>{if(!el('truckHeight').contains(e.target))heightDisplay()});
-el('truckHeight').addEventListener('keydown',e=>{if(e.key==='Escape'){heightDisplay();el('heightToggle').focus();}});
-el('transport').onclick=e=>{
-    const b=e.target.closest('[data-transport]');
-    if(!b)return;
-    transport=b.dataset.transport;
-    press(el('transport'),'transport',transport);
-    el('airHeight').hidden=transport!=='air';
-    el('truckHeight').hidden=transport!=='truck';
-};
-function showFormats(){
-    el('formats').innerHTML=formats.map(([l,p],i)=>{
-        const active=mode==='manual'&&manual.has(i);
-        const width=Math.round(26*l/114),depth=Math.round(14*p/120);
-        return '<button data-format="'+i+'" aria-pressed="'+active+'" '+(mode==='manual'?'':'disabled')+' class="'+(active?'gold':'')+'"><svg viewBox="0 0 44 27" aria-hidden="true"><path d="M5 12 '+(5+width)+' 12 '+(12+width)+' '+(12-depth/2)+' 12 '+(12-depth/2)+'Z M5 12V18H'+(5+width)+'L'+(12+width)+' '+(18-depth/2)+'V'+(12-depth/2)+' M'+(5+width)+' 12V18 M12 14V18 M19 14V18" fill="none" stroke="currentColor" stroke-width="2"/></svg>'+l+' × '+p+'</button>';
-    }).join('');
-}
-showFormats();
-el('packingModes').onclick=e=>{
-    const b=e.target.closest('[data-mode]');
-    if(!b)return;
-    mode=b.dataset.mode;
-    el('balanceOption').hidden=mode!=='auto';
-    press(el('packingModes'),'mode',mode);
-    showFormats();
-};
-el('formats').onclick=e=>{
-    const b=e.target.closest('[data-format]');
-    if(!b||mode!=='manual')return;
-    const i=Number(b.dataset.format);
-    if(manual.has(i))manual.delete(i);else manual.add(i);
-    showFormats();
-    el('formats').querySelector('[data-format="'+i+'"]').focus();
-};
 function fits(box,l,p){return (box.l<=l&&box.p<=p)||(box.p<=l&&box.l<=p);}
 function emptyPallet(dim){
     const [l,p]=dim;
@@ -2027,49 +1987,37 @@ function rebalancePlan(items,out,height,byVolume=false){
     }
     return best;
 }
-let showEmptyViewer = false;
-function refreshAfterRemoval(){
-    const ids=new Set(manifest.map(box=>box.id));
-    composedPallets=composedPallets.filter(p=>p.boxes.every(box=>ids.has(box.id)));
-    for(const p of composedPallets)for(const box of p.boxes)box.kind=manifest.findIndex(item=>item.id===box.id);
-    pallets = composedPallets.slice();
-    active = 0;
-    showEmptyViewer = !pallets.length;
-    el('status').textContent = manifest.length ? 'Calcolo da aggiornare' : 'Nessun articolo in distinta';
-    for (const id of ['volume','boxes','layers','leftLoad','rightLoad']) el(id).textContent = '—';
-    renderViewer();
-    if(pallets.length)publishProject(pallets);
-    if (manifest.length) calculateOrder();
+function palletVolume(pallet){
+    return pallet.l*pallet.p*pallet.height/1e6;
 }
-function calculateOrder(selected=0){
-    const height=transport==='air'?140:truckHeight;
-    const dims=mode==='manual'?[...manual].map(i=>formats[i]):formats;
-    const remaining=unassignedManifest();
-    if(!remaining.length&&composedPallets.length){publishProject(composedPallets.slice(),selected);return;}
-    if(!dims.length){alert('Seleziona almeno un formato di pallet.');return;}
-    if(!manifest.length){alert('Aggiungi almeno un prodotto alla distinta.');return;}
-    const total=manifest.reduce((sum,b)=>sum+b.qty,0);
-    if(total>2000||manifest.some(b=>!Number.isSafeInteger(b.qty)||b.qty<1)){alert('Inserisci quantità valide, per un massimo di 2000 colli.');return;}
-    const invalid=remaining.find(b=>![b.l,b.p,b.h,b.weight].every(v=>Number.isFinite(v)&&v>0)||
-        !Number.isInteger(b.maxLayers)||b.maxLayers<1||b.weight+tare>weightLimit||![b,smallestFace(b)].some(shape=>shape&&shape.h+base<=height&&dims.some(([l,p])=>fits(shape,l,p))));
-    if(invalid){alert('Il prodotto '+invalid.id+' non rientra nei limiti o ha dati incompleti.');return;}
-    const items=remaining.flatMap(b=>Array.from({length:b.qty},()=>({...b})));
-    const automatic=mode==='auto';
-    const balanced=automatic&&el('balanceWeight').checked;
-    const byVolume=el('tariffCriterion').value==='volume';
+function shipmentVolume(project){
+    return project.reduce((sum,pallet)=>sum+palletVolume(pallet),0);
+}
+function tallestPallet(plan){
+    return Math.max(...plan.map(pallet=>pallet.height));
+}
+</script>
+<script id="optimizationWorkerSource" type="text/plain">
+let composedPallets;
+function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,manualPallets},report){
+    composedPallets=manualPallets;
+    const items=remaining.flatMap(box=>Array.from({length:box.qty},()=>({...box})));
     const initial=planOrder(items,dims,height,balanced,automatic,byVolume);
-    if(!initial){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
+    if(!initial)return null;
+    report(20,'Confronto dei formati delle pedane…');
     let heavy=hasHeavyUpperBoxes(initial);
     const findPlan=formats=>planOrder(items,formats,height,balanced,automatic,byVolume);
     const compare=byVolume?(a,b)=>compareVolumeShipments(a,b,balanced):(a,b)=>compareGlobalShipments(a,b,balanced);
     let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy,false,compare,byVolume);
+    report(45,'Ricerca delle disposizioni per la spedizione…');
     const initialCompact=compact;
     if((automatic&&compact.minimum.length>1)||byVolume){
-        const global=searchShipmentLayouts(items,dims,height,compact,false,compare,byVolume);
+        const global=searchShipmentLayouts(items,dims,height,compact,false,compare,byVolume,
+            fraction=>report(45+25*fraction,'Ricerca delle disposizioni per la spedizione…'));
         compact=rankShipmentChoices([compact.minimum,compact.fewer,compact.alternate,...global].filter(Boolean),compare,byVolume);
         heavy=hasHeavyUpperBoxes(compact.minimum)||Boolean(compact.fewer&&hasHeavyUpperBoxes(compact.fewer));
     }
-    const planned=compact.minimum;
+    report(70,'Verifica della distribuzione dei pesi…');
     let lower=heavy?shipmentChoices(planWithHeavyLow(items,dims,height),items,dims,height,
         formats=>planWithHeavyLow(items,formats,height),false,true,compare,byVolume):null;
     if((automatic||byVolume)&&heavy){
@@ -2077,18 +2025,24 @@ function calculateOrder(selected=0){
             .filter(plan=>plan&&!hasHeavyUpperBoxes(plan));
         if(safe.length){
             lower=rankShipmentChoices(safe,compare,byVolume);
-            const global=searchShipmentLayouts(items,dims,height,lower,true,compare,byVolume);
+            const global=searchShipmentLayouts(items,dims,height,lower,true,compare,byVolume,
+                fraction=>report(70+25*fraction,'Verifica della distribuzione dei pesi…'));
             lower=rankShipmentChoices([...safe,...global],compare,byVolume);
         }
     }
-    if(heavy||compact.fewer||compact.alternate){
-        const shorter=!byVolume&&lower?.minimum&&findShorterHeavyPlan(items,dims,height,planned,lower.minimum);
-        openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume);
-        return;
-    }
-    for(const pallet of planned)pallet.maxHeight=height;
-    publishProject([...composedPallets,...planned],selected);
+    report(95,'Preparazione del risultato…');
+    const shorter=heavy&&!byVolume&&lower?.minimum&&findShorterHeavyPlan(items,dims,height,compact.minimum,lower.minimum);
+    return {compact,shorter,lower,heavy};
 }
+self.onmessage=({data})=>{
+    const report=(value,message)=>self.postMessage({value,message});
+    try{
+        self.postMessage({result:optimizeShipment(data,report)});
+    }catch(error){
+        console.error(error);
+        self.postMessage({failed:true});
+    }
+};
 function planWithHeavyLow(items,dims,height){
     const normalized=items.map(box=>({...box,format:boxFormat(box)}));
     const allowSide=items.some(smallestFace);
@@ -2173,7 +2127,7 @@ function compareVolumeShipments(a,b,balanced){
         a.length-b.length||compareGlobalShipments(a,b,balanced);
 }
 // Explore complete shipments while retaining several ways to allocate the remaining cartons.
-function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,byVolume=false){
+function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,byVolume,report){
     const maxStates=12;
     const maxDepth=byVolume?6:Math.min(reference.minimum.length,6);
     if(maxDepth<2||items.length>120||new Set(items.map(box=>box.kind)).size>12)return [];
@@ -2228,15 +2182,13 @@ function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,
         }
         states=[...next.values()].sort((a,b)=>a.estimate-b.estimate||
             a.pending.length-b.pending.length||compare(a.plan,b.plan)).slice(0,maxStates);
+        report(depth/maxDepth);
     }
     return [...complete.values()].map(plan=>plan.map(p=>{
         const copy={...p,boxes:p.boxes.map(box=>({...box}))};
         centerLoad(copy);
         return copy;
     }));
-}
-function tallestPallet(plan){
-    return Math.max(...plan.map(pallet=>pallet.height));
 }
 function findShorterHeavyPlan(items,dims,height,compact,lower){
     const areaLimit=totalPalletArea(lower);
@@ -2250,6 +2202,178 @@ function findShorterHeavyPlan(items,dims,height,compact,lower){
     }
     candidates.sort((a,b)=>tallestPallet(a)-tallestPallet(b)||comparePalletSurface(a,b));
     return candidates[0];
+}
+</script>
+<script>const el=id=>document.getElementById(id);
+const formats=[[114,114],[80,120],[60,80],[80,80]];
+const heights=[150,160,170,180,190,200,210,220];
+const manual=new Set();
+let transport='air', truckHeight=180, mode='auto', pallets=[], active=0, flat=false;
+let yaw=-.65,pitch=.56,drag;
+const canvas=el('palletCanvas');
+function icon(height){
+    const y=25-18*(height-140)/80;
+    return '<svg viewBox="0 0 32 32" aria-hidden="true"><path d="M3 27H29" stroke="#e0a63c" stroke-width="3"/><rect x="7" y="'+y+'" width="18" height="'+(25-y)+'" rx="2" fill="#e0a63c"/><path d="M29 '+y+'V25" stroke="currentColor"/></svg>';
+}
+function press(container,attribute,value){
+    for(const b of container.querySelectorAll('button')){
+        const selected=b.dataset[attribute]===value;
+        b.classList.toggle('gold',selected);
+        b.setAttribute('aria-pressed',selected);
+    }
+}
+el('heightOptions').innerHTML=heights.map(h=>'<button class="height-option" data-height="'+h+'">'+icon(h)+'<span>'+h+' cm</span></button>').join('');
+function heightDisplay(){
+    el('heightToggle').innerHTML='<span class="height-option">'+icon(truckHeight)+truckHeight+' cm ▾</span>';
+    el('heightOptions').hidden=true;
+    el('heightToggle').setAttribute('aria-expanded','false');
+}
+heightDisplay();
+el('heightToggle').onclick=()=>{
+    el('heightOptions').hidden=!el('heightOptions').hidden;
+    el('heightToggle').setAttribute('aria-expanded',!el('heightOptions').hidden);
+};
+el('heightOptions').onclick=e=>{
+    const b=e.target.closest('[data-height]');
+    if(b){truckHeight=Number(b.dataset.height);heightDisplay();el('heightToggle').focus();}
+};
+document.addEventListener('click',e=>{if(!el('truckHeight').contains(e.target))heightDisplay()});
+el('truckHeight').addEventListener('keydown',e=>{if(e.key==='Escape'){heightDisplay();el('heightToggle').focus();}});
+el('transport').onclick=e=>{
+    const b=e.target.closest('[data-transport]');
+    if(!b)return;
+    transport=b.dataset.transport;
+    press(el('transport'),'transport',transport);
+    el('airHeight').hidden=transport!=='air';
+    el('truckHeight').hidden=transport!=='truck';
+};
+function showFormats(){
+    el('formats').innerHTML=formats.map(([l,p],i)=>{
+        const active=mode==='manual'&&manual.has(i);
+        const width=Math.round(26*l/114),depth=Math.round(14*p/120);
+        return '<button data-format="'+i+'" aria-pressed="'+active+'" '+(mode==='manual'?'':'disabled')+' class="'+(active?'gold':'')+'"><svg viewBox="0 0 44 27" aria-hidden="true"><path d="M5 12 '+(5+width)+' 12 '+(12+width)+' '+(12-depth/2)+' 12 '+(12-depth/2)+'Z M5 12V18H'+(5+width)+'L'+(12+width)+' '+(18-depth/2)+'V'+(12-depth/2)+' M'+(5+width)+' 12V18 M12 14V18 M19 14V18" fill="none" stroke="currentColor" stroke-width="2"/></svg>'+l+' × '+p+'</button>';
+    }).join('');
+}
+showFormats();
+el('packingModes').onclick=e=>{
+    const b=e.target.closest('[data-mode]');
+    if(!b)return;
+    mode=b.dataset.mode;
+    el('balanceOption').hidden=mode!=='auto';
+    press(el('packingModes'),'mode',mode);
+    showFormats();
+};
+el('formats').onclick=e=>{
+    const b=e.target.closest('[data-format]');
+    if(!b||mode!=='manual')return;
+    const i=Number(b.dataset.format);
+    if(manual.has(i))manual.delete(i);else manual.add(i);
+    showFormats();
+    el('formats').querySelector('[data-format="'+i+'"]').focus();
+};
+let showEmptyViewer = false;
+function refreshAfterRemoval(){
+    const ids=new Set(manifest.map(box=>box.id));
+    composedPallets=composedPallets.filter(p=>p.boxes.every(box=>ids.has(box.id)));
+    for(const p of composedPallets)for(const box of p.boxes)box.kind=manifest.findIndex(item=>item.id===box.id);
+    pallets = composedPallets.slice();
+    active = 0;
+    showEmptyViewer = !pallets.length;
+    el('status').textContent = manifest.length ? 'Calcolo da aggiornare' : 'Nessun articolo in distinta';
+    for (const id of ['volume','boxes','layers','leftLoad','rightLoad']) el(id).textContent = '—';
+    renderViewer();
+    if(pallets.length)publishProject(pallets);
+    if (manifest.length) calculateOrder();
+}
+let optimizationWorker=null;
+const optimizationButton=el('calculateOptimization');
+function showOptimizationProgress(value,message){
+    el('optimizationFeedback').hidden=false;
+    el('optimizationProgress').hidden=value===null;
+    if(value!==null){
+        el('optimizationProgress').value=Math.floor(value);
+        el('optimizationPercent').textContent=Math.floor(value)+'%';
+    }else{
+        el('optimizationPercent').textContent='';
+    }
+    if(el('optimizationStage').textContent!==message)el('optimizationStage').textContent=message;
+}
+function stopOptimization(){
+    optimizationWorker?.terminate();
+    optimizationWorker=null;
+    optimizationButton.disabled=false;
+}
+function optimizationInputs(){
+    const automatic=mode==='auto';
+    return {
+        remaining:unassignedManifest(),
+        dims:mode==='manual'?[...manual].map(i=>formats[i]):formats,
+        height:transport==='air'?140:truckHeight,
+        automatic,
+        balanced:automatic&&el('balanceWeight').checked,
+        byVolume:el('tariffCriterion').value==='volume',
+        manualPallets:composedPallets
+    };
+}
+function calculateOrder(selected=0){
+    stopOptimization();
+    el('optimizationFeedback').hidden=true;
+    const input=optimizationInputs();
+    const {height,dims,remaining,byVolume}=input;
+    if(!remaining.length&&composedPallets.length){publishProject(composedPallets.slice(),selected);return;}
+    if(!dims.length){alert('Seleziona almeno un formato di pallet.');return;}
+    if(!manifest.length){alert('Aggiungi almeno un prodotto alla distinta.');return;}
+    const total=manifest.reduce((sum,b)=>sum+b.qty,0);
+    if(total>2000||manifest.some(b=>!Number.isSafeInteger(b.qty)||b.qty<1)){alert('Inserisci quantità valide, per un massimo di 2000 colli.');return;}
+    const invalid=remaining.find(b=>![b.l,b.p,b.h,b.weight].every(v=>Number.isFinite(v)&&v>0)||
+        !Number.isInteger(b.maxLayers)||b.maxLayers<1||b.weight+tare>weightLimit||![b,smallestFace(b)].some(shape=>shape&&shape.h+base<=height&&dims.some(([l,p])=>fits(shape,l,p))));
+    if(invalid){alert('Il prodotto '+invalid.id+' non rientra nei limiti o ha dati incompleti.');return;}
+    const snapshot=JSON.stringify(input);
+    showOptimizationProgress(0,'Ottimizzazione in corso. Calcolo delle prime disposizioni…');
+    optimizationButton.disabled=true;
+    const fail=()=>{
+        stopOptimization();
+        showOptimizationProgress(null,'Calcolo non riuscito. Premi «Calcola Ottimizzazione» per riprovare.');
+    };
+    // Build a local worker so the standalone HTML also works offline.
+    try{
+        const source=el('shipmentEngine').textContent+'\n'+el('optimizationWorkerSource').textContent;
+        const url=URL.createObjectURL(new Blob([source],{type:'text/javascript'}));
+        try{optimizationWorker=new Worker(url);}
+        finally{URL.revokeObjectURL(url);}
+        const worker=optimizationWorker;
+        worker.onerror=()=>{if(optimizationWorker===worker)fail();};
+        worker.onmessageerror=worker.onerror;
+        worker.onmessage=({data})=>{
+            if(optimizationWorker!==worker)return;
+            if(data.failed){fail();return;}
+            if(data.value!==undefined){
+                showOptimizationProgress(data.value,data.message);
+                return;
+            }
+            stopOptimization();
+            if(snapshot!==JSON.stringify(optimizationInputs())){
+                showOptimizationProgress(null,'Il progetto è cambiato durante il calcolo. Avvia una nuova ottimizzazione.');
+                return;
+            }
+            if(!data.result){
+                showOptimizationProgress(null,'Impossibile disporre tutti i colli con i limiti selezionati.');
+                return;
+            }
+            const {compact,shorter,lower,heavy}=data.result;
+            showOptimizationProgress(100,'Ottimizzazione completata.');
+            if(heavy||compact.fewer||compact.alternate){
+                openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume);
+                return;
+            }
+            for(const pallet of compact.minimum)pallet.maxHeight=height;
+            publishProject([...composedPallets,...compact.minimum],selected);
+        };
+        worker.postMessage(input);
+    }catch(error){
+        console.error(error);
+        fail();
+    }
 }
 function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume=false){
     const dialog=el('heavyReviewDialog');
@@ -2482,12 +2606,6 @@ function drawViewerPallet(pallet){
         new Option('Piano '+(i+1)+' di '+layers.length+' · '+(base+z)+' cm · '+boxes.length+' colli',z)));
     select.value=String(layers[index][0]);
     draw(canvas,{...pallet,boxes:layers[index][1]},true,yaw,pitch);
-}
-function palletVolume(pallet){
-    return pallet.l*pallet.p*pallet.height/1e6;
-}
-function shipmentVolume(project){
-    return project.reduce((sum,pallet)=>sum+palletVolume(pallet),0);
 }
 function formatVolume(volume){
     return volume.toLocaleString('it-IT',{minimumFractionDigits:3,maximumFractionDigits:3})+' m³';
@@ -3610,37 +3728,70 @@ function projectHasWork(){
 }
 el('saveProject').onclick=saveProject;
 el('assemblySaveProject').onclick=saveProject;
-el('openProject').onclick=()=>{
-    const list=el('savedProjectList');
-    list.replaceChildren();
+const savedProjectSelect=el('savedProjectSelect');
+function renderSavedProjectMenu(message=''){
+    let projects=[];
     try{
-        for(const entry of projectArchive()){
-            const button=document.createElement('button');
-            button.textContent=entry.name;
-            button.onclick=()=>{
-                try{
-                    const project=parseProject(entry.data);
-                    if(projectHasWork()&&!confirm('Aprire il progetto e sostituire il lavoro corrente?'))return;
-                    el('projectOpenDialog').close();
-                    setProject(project);
-                    currentProjectName=entry.name;
-                    markProjectClean();
-                    el('projectMessage').textContent='Progetto aperto: '+entry.name;
-                }catch(error){el('projectMessage').textContent=error.message;}
-            };
-            const row=document.createElement('div');
-            row.className='saved-project-actions';
-            const email=document.createElement('button');
-            email.type='button';
-            email.textContent='Invia JSON via email';
-            email.setAttribute('aria-label','Invia JSON via email per '+entry.name);
-            email.onclick=()=>emailSavedProject(entry);
-            row.append(button,email);
-            list.append(row);
+        projects=projectArchive();
+        if(!Array.isArray(projects))throw new Error();
+        savedProjectSelect.replaceChildren(new Option('Scegli un progetto',''),
+            ...projects.map(({name})=>new Option(name,projectNameKey(name))));
+    }catch{
+        projects=[];
+        message='Archivio locale non disponibile.';
+        savedProjectSelect.replaceChildren(new Option('Archivio non disponibile',''));
+    }
+    savedProjectSelect.disabled=!projects.length;
+    el('savedProjectActions').hidden=true;
+    el('savedProjectStatus').textContent=message||(projects.length?'':'Nessun progetto salvato.');
+}
+function withSelectedProject(action){
+    const key=savedProjectSelect.value;
+    if(!key)return;
+    try{
+        const projects=projectArchive();
+        const index=projects.findIndex(entry=>projectNameKey(entry.name)===key);
+        if(index<0){
+            renderSavedProjectMenu('Il progetto selezionato non è più disponibile.');
+            return;
         }
-    }catch{list.textContent='Archivio locale non disponibile.';}
-    el('projectOpenDialog').showModal();
+        action(projects[index],projects,index);
+    }catch(error){
+        el('savedProjectStatus').textContent=error.message;
+    }
+}
+savedProjectSelect.onchange=()=>{
+    el('savedProjectActions').hidden=!savedProjectSelect.value;
+    el('savedProjectStatus').textContent='';
 };
+el('openProject').onclick=()=>{
+    renderSavedProjectMenu();
+    el('projectOpenDialog').showModal();
+    if(!savedProjectSelect.disabled)savedProjectSelect.focus();
+};
+el('openSavedProject').onclick=()=>withSelectedProject(entry=>{
+    const project=parseProject(entry.data);
+    if(projectHasWork()&&!confirm('Aprire il progetto e sostituire il lavoro corrente?'))return;
+    setProject(project);
+    currentProjectName=entry.name;
+    markProjectClean();
+    el('projectOpenDialog').close();
+    el('projectMessage').textContent='Progetto aperto: '+entry.name;
+});
+el('deleteSavedProject').onclick=()=>withSelectedProject((entry,projects,index)=>{
+    if(!confirm('Cancellare «'+entry.name+'» dai progetti salvati?'))return;
+    projects.splice(index,1);
+    localStorage.setItem(projectArchiveKey,JSON.stringify(projects));
+    if(projectNameKey(currentProjectName)===projectNameKey(entry.name)){
+        currentProjectName='';
+        savedSnapshot='';
+        lastDraftSnapshot=undefined;
+        persistRecoveryDraft();
+    }
+    renderSavedProjectMenu('Progetto cancellato: '+entry.name);
+    (savedProjectSelect.disabled?el('importProjectFile'):savedProjectSelect).focus();
+});
+el('emailSavedProject').onclick=()=>withSelectedProject(entry=>emailSavedProject(entry));
 el('importProjectFile').onclick=()=>{el('projectOpenDialog').close();el('projectFile').click();};
 const cloudDialog=el('cloudDialog');
 let cloudSession=null;
@@ -3973,7 +4124,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
