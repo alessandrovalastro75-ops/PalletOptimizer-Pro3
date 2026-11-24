@@ -1728,6 +1728,42 @@ function placeUpperPinwheels(p,items,height){
     }
     return pending;
 }
+function completeFlatBaseWithUpperGrid(pallet,baseWidth,baseDepth,upper,remaining,height){
+    const first=upper[0];
+    const top=pallet.height-base;
+    if(upper.length<2||upper.some(box=>boxFormat(box)!==boxFormat(first)))return [];
+    if(pallet.weight+[...upper,...remaining].reduce((sum,box)=>sum+box.weight,0)>weightLimit)return [];
+    const candidates=[];
+    const stackOrder=[...upper].sort((a,b)=>b.weight-a.weight);
+    const orientations=first.l===first.p?[[first.l,first.p]]:[[first.l,first.p],[first.p,first.l]];
+    const x=(pallet.l-baseWidth)/2,y=(pallet.p-baseDepth)/2;
+    for(const [l,p] of orientations){
+        const cols=Math.floor(baseWidth/l+1e-9),rows=Math.floor(baseDepth/p+1e-9);
+        const perLayer=cols*rows;
+        if(perLayer<2||top+base+Math.ceil(upper.length/perLayer)*first.h>height+1e-8)continue;
+        for(const fillColumns of (cols>1&&rows>1&&upper.length%perLayer?[false,true]:[false])){
+            const trial={...pallet,boxes:[...pallet.boxes],free:[],columns:[]};
+            // A full grid is contained in the deck of the flat base. Every higher
+            // grid uses the same slots, so geometrical support is continuous.
+            const complete=stackOrder.every((box,index)=>{
+                const slot=index%perLayer;
+                const col=fillColumns?Math.floor(slot/rows):slot%cols;
+                const row=fillColumns?slot%rows:Math.floor(slot/cols);
+                const z=top+Math.floor(index/perLayer)*first.h;
+                if(!canUseLayer(trial,box,z))return false;
+                trial.boxes.push({...box,x:x+col*l,y:y+row*p,z,l,p});
+                trial.weight+=box.weight;
+                trial.volume+=l*p*box.h;
+                trial.height=base+z+box.h;
+                return true;
+            });
+            if(complete&&remaining.every(box=>put(trial,box,height,weightLimit,Infinity))){
+                candidates.push({p:trial,remaining:[],uneven:unevenLayers(trial)});
+            }
+        }
+    }
+    return candidates;
+}
 function flatBaseCandidates(dim,items,groups,height){
     const result=[];
     for(const {box} of groups.values()){
@@ -1750,6 +1786,7 @@ function flatBaseCandidates(dim,items,groups,height){
                 const {p:pallet,remaining}=layout;
                 pallet.flatBase=true;
                 pallet.free=[];
+                result.push(...completeFlatBaseWithUpperGrid(pallet,cols*l,rows*p,others,remaining,height));
                 for(const p of [{...pallet,boxes:[...pallet.boxes],free:[]},pallet]){
                     const before=p.boxes.length;
                     const pending=p===pallet?others:placeUpperPinwheels(p,others,height);
@@ -4505,7 +4542,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
