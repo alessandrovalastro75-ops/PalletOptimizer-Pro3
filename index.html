@@ -422,8 +422,8 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 .shipment-weights dl>div{padding:6px 0;border-top:1px solid #71819a55}
 .shipment-weights dd{margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
 </style>
-</head><body class="pin-locked">
-<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav></header>
+<style>.tariff-controls{display:grid;gap:8px;margin-top:12px}.tariff-controls label{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px}.tariff-controls input{width:128px}.tariff-controls select,.tariff-controls input{max-width:100%}</style><style>.saved-project-actions{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0}.saved-project-actions button{min-width:0;overflow-wrap:anywhere}</style></head><body class="pin-locked">
+<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa</button><button type="button" onclick="emailShipmentReport()">Invia report via email</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
 <div class="controls">
@@ -431,6 +431,7 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <button type="button" id="newProject">Nuovo progetto</button>
 <button type="button" id="saveProject">Salva progetto</button>
 <button type="button" id="openProject">Apri progetto</button>
+<button type="button" id="exitApp">Esci</button>
 <input id="projectFile" type="file" accept=".json,application/json" hidden>
 <p id="projectMessage" role="status"></p>
 </section>
@@ -443,12 +444,17 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <div class="height-picker" id="truckHeight" hidden>
 <button id="heightToggle" type="button" aria-expanded="false" aria-controls="heightOptions"></button>
 <div id="heightOptions" hidden></div>
-</div><small>750 kg lordi per pedana</small></div></section>
+</div><small>750 kg lordi per pedana</small></div>
+<div class="tariff-controls">
+<label>Criterio di spedizione <select id="tariffCriterion"><option value="volume">Peso volumetrico</option><option value="surface">Superficie a terra</option></select></label>
+<label>Divisore aereo (cm³/kg) <input id="airDivisor" type="number" min="1" step="any" value="6000"></label>
+<label>Divisore camion (cm³/kg) <input id="truckDivisor" type="number" min="1" step="any" placeholder="Da preventivo"></label>
+</div></section>
 <section class="panel padded"><h2>Modalità di pallettizzazione</h2>
 <div id="packingModes" class="seg options">
 <button class="gold" data-mode="auto" aria-pressed="true">Automatica</button>
 <button data-mode="manual" aria-pressed="false">Automatica con scelta formato pedane</button>
-</div><label id="balanceOption"><input id="balanceWeight" type="checkbox" checked> Bilancia il peso a parità di superficie</label><div id="formats" aria-label="Formati pallet"></div></section>
+</div><label id="balanceOption"><input id="balanceWeight" type="checkbox" checked> Bilancia il peso come ultimo spareggio</label><div id="formats" aria-label="Formati pallet"></div></section>
 <section class="panel padded"><h2>Articoli da pallettizzare</h2><div class="article-actions"><button onclick="openCatalogModal()">📦 Catalogo (<span id="catalogCount">4</span>)</button><button type="button" class="add" onclick="openProductPicker()" aria-haspopup="dialog">＋ &nbsp; Aggiungi Prodotto</button></div>
 <div id="manifestCountBadge" hidden></div><div id="manifestList"></div></section>
 <section class="panel padded"><h2>Disposizione manuale</h2><div class="article-actions"><button type="button" id="openCompose">Apri disposizione manuale</button></div></section>
@@ -463,7 +469,7 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <section class="panel padded loads"><h3>⚖ &nbsp; Riepilogo Carichi</h3><div class="stats"><div>Sinistra<strong id="leftLoad">—</strong></div><div>Destra<strong id="rightLoad">—</strong></div></div></section>
 <section class="panel padded shipment-weights" aria-labelledby="shipmentWeightsTitle">
 <h3 id="shipmentWeightsTitle">Peso delle pedane</h3>
-<p class="weight-total"><span>Peso lordo totale</span><strong id="shipmentWeightTotal">—</strong></p>
+<p class="weight-total"><span>Peso lordo totale</span><strong id="shipmentWeightTotal">—</strong></p><p class="weight-total"><span>Peso volumetrico</span><strong id="shipmentVolumetricWeight">—</strong></p>
 <dl id="shipmentWeightList"></dl>
 </section>
 <section class="panel action"><button onclick="calculateOrder()">▶ <span>Calcola<br>Ottimizzazione</span></button></section>
@@ -491,9 +497,15 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <button type="button" id="assemblyLeft" aria-label="Ruota vista a sinistra">⟲</button><button type="button" id="assemblyRight" aria-label="Ruota vista a destra">⟳</button></div>
 <div class="assembly-view"><p id="assemblyBlank">Scegli una pedana per iniziare.</p><canvas id="composeCanvas" width="960" height="650" hidden aria-label="Pedana 3D da comporre"></canvas></div>
 <p id="assemblyStatus" role="status"></p></div></div>
-<footer class="assembly-footer"><button type="button" id="assemblySaveProject">Salva progetto</button><button type="button" id="assemblyAdd" disabled>Aggiungi al progetto</button></footer>
+<footer class="assembly-footer"><button type="button" id="assemblyExitApp">Esci</button><button type="button" id="assemblySaveProject">Salva progetto</button><button type="button" id="assemblyAdd" disabled>Aggiungi al progetto</button></footer>
 <section id="assemblyReview" hidden aria-label="Verifica disposizione"><div><h3>Verifica della pedana</h3><ul id="assemblyWarnings"></ul>
 <div class="assembly-tools"><button type="button" id="assemblyConfirm">Conferma la disposizione</button><button type="button" id="assemblyRestart">Riposiziona carico</button></div></div></section>
+</dialog>
+<dialog id="reportEmailFallback" class="project-dialog" aria-labelledby="reportEmailTitle">
+<form method="dialog"><button aria-label="Chiudi">✕</button></form>
+<h2 id="reportEmailTitle">File pronto</h2>
+<p>Allega alla bozza il file scaricato <strong id="reportEmailName"></strong>.</p>
+<a id="reportEmailDraft">Apri bozza email</a>
 </dialog>
 <dialog id="heavyReviewDialog" class="project-dialog" aria-labelledby="heavyReviewTitle">
 <h2 id="heavyReviewTitle">Colli pesanti sui piani superiori</h2>
@@ -511,6 +523,27 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 <canvas id="reviewCanvas" width="520" height="300" aria-label="Anteprima della pedana selezionata"></canvas>
 <button id="reviewConfirm" type="button">Conferma piano selezionato</button>
 <form method="dialog" style="display:inline"><button>Annulla</button></form>
+</dialog>
+<dialog id="exitAppDialog" class="project-dialog" aria-labelledby="exitAppTitle">
+<form method="dialog">
+<h2 id="exitAppTitle">Vuoi uscire dall’app?</h2>
+<p id="exitAppMessage"></p>
+<div class="project-dialog-actions">
+<button value="cancel" autofocus>Annulla</button>
+<button id="exitAppDiscard" value="exit">Esci</button>
+<button id="exitAppSave" value="save">Salva ed esci</button>
+</div>
+</form>
+</dialog>
+<dialog id="recoverProjectDialog" class="project-dialog" aria-labelledby="recoverProjectTitle">
+<form method="dialog">
+<h2 id="recoverProjectTitle">Riprendere la bozza?</h2>
+<p>Puoi recuperare il lavoro in corso dall’ultima apertura su questo dispositivo.</p>
+<div class="project-dialog-actions">
+<button value="discard">Scarta bozza</button>
+<button value="restore" autofocus>Riprendi bozza</button>
+</div>
+</form>
 </dialog>
 <dialog id="projectSaveDialog" class="project-dialog">
 <form id="projectNameForm">
@@ -574,6 +607,7 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
             <div class="catalog-transfers">
                 <button type="button" onclick="document.getElementById('catalogFile').click()">Importa JSON</button>
                 <button type="button" onclick="exportJSON()">Esporta JSON</button>
+                <button type="button" onclick="emailCatalog()">Invia JSON via email</button>
                 <input type="file" id="catalogFile" accept=".json,application/json" onchange="importCatalogFile(this)" hidden>
             </div>
             <p id="catalogTransferStatus" role="status" class="text-xs text-slate-300"></p>
@@ -970,16 +1004,14 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
             });
         }
 
-        function exportJSON() {
-            const blob = new Blob([JSON.stringify({ catalog }, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = 'PalletOptimizer Catalogo.json';
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        function catalogJsonFile(){
+            return jsonAttachment({catalog},'PalletOptimizer Catalogo.json');
+        }
+        function exportJSON(){
+            downloadAttachment(catalogJsonFile());
+        }
+        function emailCatalog(){
+            return emailAttachment(()=>catalogJsonFile(),'Catalogo PalletOptimizer Pro','Ciao,\nin allegato il catalogo in formato JSON.');
         }
 
         async function importCatalogFile(input) {
@@ -1186,7 +1218,8 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
         const z=box.z+box.h;
         if(target && box!==target) continue;
         if(first && Math.abs((z-first.z)/b.h-Math.round((z-first.z)/b.h))>1e-8) continue;
-        if(base+z+b.h>height || (!p.flatBase&&box.l*box.p+1e-8<b.l*b.p)) continue;
+        // Check the combined support at this level, including bridged pinwheel openings.
+        if(base+z+b.h>height) continue;
         if(!surfaces.has(z)) surfaces.set(z,[]);
         surfaces.get(z).push(box);
     }
@@ -1767,7 +1800,7 @@ function compactUpperLayers(pallet,height){
         return;
     }
 }
-function planOrder(items,dims,height,balanced,allowFlatBase=false){
+function planOrder(items,dims,height,balanced,allowFlatBase=false,byVolume=false){
     items=items.map(box=>({...box,format:boxFormat(box)}));
     const upright=buildPlan(items,dims,height,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,true,allowFlatBase):null;
@@ -1787,7 +1820,7 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false){
         if(separated&&separated.length===plan.length&&totalPalletArea(separated)<=totalPalletArea(plan)&&
             separated.reduce((sum,p)=>sum+articleMix(p),0)<plan.reduce((sum,p)=>sum+articleMix(p),0))plan=separated;
     }
-    if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height);
+    if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height,byVolume);
     const originals=new Map(items.map(box=>[box.kind,box]));
     if(plan)for(const pallet of plan){
         if(allowFlatBase){
@@ -1969,7 +2002,7 @@ function buildPlan(items,dims,height,allowSmallFace,allowFlatBase,layered=false,
     }
     return out;
 }
-function rebalancePlan(items,out,height){
+function rebalancePlan(items,out,height,byVolume=false){
     const allowSmallFace=out.some(p=>p.boxes.some(box=>box.smallFace));
     const spread=plan=>Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
@@ -1989,6 +2022,7 @@ function rebalancePlan(items,out,height){
         if(aboveFloor.every(box=>place(box,false))&&plan.every(p=>p.boxes.length)&&
             spread(plan)+1e-8<spread(best)&&inversions(plan)<=originalInversions+1e-8&&
             stacking(plan)<=originalStacking&&baseLayerDeficit(plan)<=baseLayerDeficit(best)&&
+            (byVolume?compareVolumeShipments(plan,best,false):compareShipments(plan,best))<=0&&
             smallerPallets.every(index=>plan[index].height<=best[index].height+1e-8))best=plan;
     }
     return best;
@@ -2022,33 +2056,34 @@ function calculateOrder(selected=0){
     const items=remaining.flatMap(b=>Array.from({length:b.qty},()=>({...b})));
     const automatic=mode==='auto';
     const balanced=automatic&&el('balanceWeight').checked;
-    const initial=planOrder(items,dims,height,balanced,automatic);
+    const byVolume=el('tariffCriterion').value==='volume';
+    const initial=planOrder(items,dims,height,balanced,automatic,byVolume);
     if(!initial){alert('Impossibile disporre tutti i colli con i limiti selezionati.');return;}
     let heavy=hasHeavyUpperBoxes(initial);
-    const findPlan=formats=>planOrder(items,formats,height,balanced,automatic);
-    let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy);
+    const findPlan=formats=>planOrder(items,formats,height,balanced,automatic,byVolume);
+    const compare=byVolume?(a,b)=>compareVolumeShipments(a,b,balanced):(a,b)=>compareGlobalShipments(a,b,balanced);
+    let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy,false,compare,byVolume);
     const initialCompact=compact;
-    const compare=automatic?(a,b)=>compareGlobalShipments(a,b,balanced):comparePalletSurface;
-    if(automatic&&compact.minimum.length>1){
-        const global=searchShipmentLayouts(items,dims,height,compact,false,compare);
-        compact=rankShipmentChoices([compact.minimum,compact.fewer,...global].filter(Boolean),compare);
+    if((automatic&&compact.minimum.length>1)||byVolume){
+        const global=searchShipmentLayouts(items,dims,height,compact,false,compare,byVolume);
+        compact=rankShipmentChoices([compact.minimum,compact.fewer,compact.alternate,...global].filter(Boolean),compare,byVolume);
         heavy=hasHeavyUpperBoxes(compact.minimum)||Boolean(compact.fewer&&hasHeavyUpperBoxes(compact.fewer));
     }
     const planned=compact.minimum;
     let lower=heavy?shipmentChoices(planWithHeavyLow(items,dims,height),items,dims,height,
-        formats=>planWithHeavyLow(items,formats,height),false,true):null;
-    if(automatic&&heavy){
+        formats=>planWithHeavyLow(items,formats,height),false,true,compare,byVolume):null;
+    if((automatic||byVolume)&&heavy){
         const safe=[lower?.minimum,lower?.fewer,initialCompact.minimum,initialCompact.fewer]
             .filter(plan=>plan&&!hasHeavyUpperBoxes(plan));
         if(safe.length){
-            lower=rankShipmentChoices(safe,compare);
-            const global=searchShipmentLayouts(items,dims,height,lower,true,compare);
-            lower=rankShipmentChoices([...safe,...global],compare);
+            lower=rankShipmentChoices(safe,compare,byVolume);
+            const global=searchShipmentLayouts(items,dims,height,lower,true,compare,byVolume);
+            lower=rankShipmentChoices([...safe,...global],compare,byVolume);
         }
     }
-    if(heavy||compact.fewer){
-        const shorter=lower?.minimum&&findShorterHeavyPlan(items,dims,height,planned,lower.minimum);
-        openShipmentReview(compact,shorter,lower,heavy,height,selected);
+    if(heavy||compact.fewer||compact.alternate){
+        const shorter=!byVolume&&lower?.minimum&&findShorterHeavyPlan(items,dims,height,planned,lower.minimum);
+        openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume);
         return;
     }
     for(const pallet of planned)pallet.maxHeight=height;
@@ -2090,11 +2125,11 @@ function separateArticlesPlan(items,dims,height){
     }
     return result;
 }
-function shipmentChoices(initial,items,dims,height,findPlan,heavy,preserveSeparation=false){
+function shipmentChoices(initial,items,dims,height,findPlan,heavy,preserveSeparation=false,compare=comparePalletSurface,byVolume=false){
     const separated=plan=>plan.every(pallet=>pallet.boxes.every(box=>box.kind===pallet.boxes[0].kind));
     const keepSeparate=preserveSeparation&&initial&&separated(initial);
     const candidates=[initial].filter(Boolean);
-    if(!initial||initial.length>1){
+    if(!initial||initial.length>1||byVolume){
         const formatOptions=dims.flatMap((dim,index)=>[
             [dim],...dims.slice(index+1).map(other=>[dim,other])
         ]);
@@ -2108,12 +2143,16 @@ function shipmentChoices(initial,items,dims,height,findPlan,heavy,preserveSepara
             if(byArticle)candidates.push(byArticle);
         }
     }
-    return rankShipmentChoices(candidates);
+    return rankShipmentChoices(candidates,compare,byVolume);
 }
-function rankShipmentChoices(candidates,compare=comparePalletSurface){
+function rankShipmentChoices(candidates,compare=comparePalletSurface,byVolume=false){
     candidates.sort(compare);
     const minimum=candidates[0];
     if(!minimum)return {minimum};
+    if(byVolume){
+        const surface=[...candidates].sort(comparePalletSurface)[0];
+        return {minimum,alternate:totalPalletArea(surface)<totalPalletArea(minimum)?surface:undefined};
+    }
     const area=totalPalletArea(minimum);
     const projectArea=area+totalPalletArea(composedPallets);
     const comparable=candidates.filter(plan=>plan.length<minimum.length&&
@@ -2121,41 +2160,50 @@ function rankShipmentChoices(candidates,compare=comparePalletSurface){
     comparable.sort((a,b)=>a.length-b.length||compare(a,b));
     return {minimum,fewer:comparable[0]};
 }
+function shipmentWeightSpread(plan){
+    return Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
+}
 function compareGlobalShipments(a,b,balanced){
-    const spread=plan=>Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
     return comparePalletSurface(a,b)||
         Number(hasHeavyUpperBoxes(a))-Number(hasHeavyUpperBoxes(b))||
-        (balanced?spread(a)-spread(b):0)||compareShipments(a,b);
+        compareShipments(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0);
+}
+function compareVolumeShipments(a,b,balanced){
+    return Math.round((shipmentVolume(a)-shipmentVolume(b))*1e6)||
+        a.length-b.length||compareGlobalShipments(a,b,balanced);
 }
 // Explore complete shipments while retaining several ways to allocate the remaining cartons.
-function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare){
+function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,byVolume=false){
     const maxStates=12;
-    const maxDepth=Math.min(reference.minimum.length,6);
+    const maxDepth=byVolume?6:Math.min(reference.minimum.length,6);
     if(maxDepth<2||items.length>120||new Set(items.map(box=>box.kind)).size>12)return [];
     const minimumArea=Math.min(...dims.map(([l,p])=>l*p));
     const maxArea=totalPalletArea(reference.minimum)*(1+palletAreaTolerance)+
         totalPalletArea(composedPallets)*palletAreaTolerance;
+    const maxVolume=shipmentVolume(reference.minimum)*1e6;
     const requiredVolume=pending=>pending.reduce((sum,b)=>sum+b.l*b.p*b.h,0);
     const normalized=items.map(box=>({...box,format:boxFormat(box)}));
     const byArea=(a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight;
     const allowSide=normalized.some(smallestFace);
     const complete=new Map();
-    let states=[{pending:normalized,plan:[],area:0}];
+    let states=[{pending:normalized,plan:[],area:0,volume:0}];
     for(let depth=1;depth<=maxDepth&&states.length;depth++){
         const next=new Map();
-        for(const {pending,plan,area} of states){
+        for(const {pending,plan,area,volume} of states){
             const largestFirst=[...pending].sort(byArea);
             const heavyFirst=[...pending].sort((a,b)=>b.weight-a.weight||byArea(a,b));
             const orders=[largestFirst];
             if(heavyFirst.some((box,index)=>box.kind!==largestFirst[index].kind))orders.push(heavyFirst);
             for(const dim of dims){
                 const footprint=dim[0]*dim[1];
-                if(area+footprint>maxArea+1e-8)continue;
+                if(!byVolume&&area+footprint>maxArea+1e-8)continue;
                 for(const order of orders){
                     const candidates=palletCandidates(dim,order,height,allowSide,true,true);
                     for(const {p,remaining} of candidates){
                         if(!p.boxes.length||keepHeavyLow&&heavyUpperBoxes(p).length)continue;
                         const usedArea=area+footprint;
+                        const usedVolume=volume+footprint*p.height;
+                        if(byVolume&&usedVolume>maxVolume+1e-6)continue;
                         const trial=[...plan,p];
                         if(!remaining.length){
                             const best=complete.get(depth);
@@ -2163,14 +2211,16 @@ function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare)
                             continue;
                         }
                         if(depth===maxDepth)continue;
-                        const estimate=usedArea+Math.max(minimumArea,requiredVolume(remaining)/(height-base));
-                        if(estimate>maxArea+1e-8)continue;
+                        const remainingVolume=requiredVolume(remaining);
+                        const estimate=byVolume?usedVolume+remainingVolume+minimumArea*base:
+                            usedArea+Math.max(minimumArea,remainingVolume/(height-base));
+                        if(estimate>(byVolume?maxVolume:maxArea)+1e-6)continue;
                         const counts=new Map();
                         for(const box of remaining)counts.set(box.kind,(counts.get(box.kind)||0)+1);
                         const key=JSON.stringify([...counts].sort(([a],[b])=>a-b));
                         const best=next.get(key);
                         if(!best||compare(trial,best.plan)<0)next.set(key,{
-                            pending:remaining,plan:trial,area:usedArea,estimate
+                            pending:remaining,plan:trial,area:usedArea,volume:usedVolume,estimate
                         });
                     }
                 }
@@ -2201,14 +2251,14 @@ function findShorterHeavyPlan(items,dims,height,compact,lower){
     candidates.sort((a,b)=>tallestPallet(a)-tallestPallet(b)||comparePalletSurface(a,b));
     return candidates[0];
 }
-function openShipmentReview(compact,shorter,lower,heavy,height,selected){
+function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume=false){
     const dialog=el('heavyReviewDialog');
     const options=[
         {plan:compact.fewer,reference:compact.minimum,button:el('reviewCompactFewer'),label:'Consigliata · meno pedane'},
-        {plan:compact.minimum,button:el('reviewCompact'),label:'Superficie minima'},
-        {plan:shorter,button:el('reviewShorter'),label:'Altezza ridotta'},
+        {plan:compact.minimum,button:el('reviewCompact'),label:byVolume?'Volume minimo':'Superficie minima'},
+        {plan:shorter||compact.alternate,button:el('reviewShorter'),label:shorter?'Altezza ridotta':'Superficie minima'},
         {plan:lower?.fewer,reference:lower?.minimum,button:el('reviewLowerFewer'),label:'Colli pesanti in basso · consigliata'},
-        {plan:lower?.minimum,button:el('reviewLower'),label:'Colli pesanti in basso · superficie minima'}
+        {plan:lower?.minimum,button:el('reviewLower'),label:byVolume?'Colli pesanti in basso · volume minimo':'Colli pesanti in basso · superficie minima'}
     ].filter(option=>{
         option.button.hidden=!option.plan;
         return option.plan;
@@ -2233,7 +2283,7 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected){
     el('heavyReviewTitle').textContent=heavy?'Colli pesanti sui piani superiori':'Scegli la disposizione';
     el('heavyReviewHelp').textContent=heavy
         ? 'Confronta le disposizioni e verifica che i colli di appoggio possano sostenere il peso.'
-        : 'La proposta con meno pedane rientra nel 5% di superficie in più rispetto alla superficie minima.';
+        : byVolume?'Confronta volume e superficie delle alternative.':'La proposta con meno pedane rientra nel 5% di superficie in più rispetto alla superficie minima.';
     const confirm=el('reviewConfirm');
     const select=el('reviewPallet');
     let choice=0;
@@ -2253,7 +2303,7 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected){
     const planLabel=plan=>{
         const count=plan.length===1?'1 pedana':plan.length+' pedane';
         const area=(totalPalletArea(plan)/10000).toLocaleString('it-IT',{maximumFractionDigits:4});
-        return count+' · '+area+' m² · H max '+tallestPallet(plan)+' cm';
+        return count+' · '+area+' m² · '+formatVolume(shipmentVolume(plan))+' · '+formatShipmentWeight(plan)+' lordi'+(currentDivisor()?' · '+formatVolumetricWeight(plan)+' volumetrici':'')+' · H max '+tallestPallet(plan)+' cm';
     };
     options.forEach(({button,label,reference,plan},i)=>{
         const baseline=reference&&totalPalletArea(reference)+totalPalletArea(composedPallets);
@@ -2442,11 +2492,24 @@ function shipmentVolume(project){
 function formatVolume(volume){
     return volume.toLocaleString('it-IT',{minimumFractionDigits:3,maximumFractionDigits:3})+' m³';
 }
+function currentDivisor(){
+    const value=Number(el(transport==='air'?'airDivisor':'truckDivisor').value);
+    return Number.isFinite(value)&&value>=1?value:0;
+}
+function formatShipmentWeight(project){
+    return palletWeightFormat.format(project.reduce((total,pallet)=>total+pallet.weight,0))+' kg';
+}
+function formatVolumetricWeight(project){
+    const divisor=currentDivisor();
+    return divisor?palletWeightFormat.format(shipmentVolume(project)*1e6/divisor)+' kg':'—';
+}
+for(const id of ['airDivisor','truckDivisor'])el(id).addEventListener('input',()=>renderShipmentWeights(pallets));
+el('transport').addEventListener('click',()=>renderShipmentWeights(pallets));
 const palletWeightFormat=new Intl.NumberFormat('it-IT',{maximumFractionDigits:2});
 function renderShipmentWeights(project){
     const format=weight=>palletWeightFormat.format(weight)+' kg';
-    el('shipmentWeightTotal').textContent=project.length
-        ?format(project.reduce((total,pallet)=>total+pallet.weight,0)):'—';
+    el('shipmentWeightTotal').textContent=project.length?formatShipmentWeight(project):'—';
+    el('shipmentVolumetricWeight').textContent=project.length?formatVolumetricWeight(project):'—';
     el('shipmentWeightList').replaceChildren(...project.map((pallet,index)=>{
         const row=document.createElement('div');
         const label=document.createElement('dt');
@@ -3265,7 +3328,7 @@ function projectSnapshot(){
     const snapshotPallet=p=>({l:p.l,p:p.p,maxHeight:p.maxHeight,boxes:p.boxes});
     return {type:'PalletOptimizerProject',version:1,
         client:el('orderClient').value,order:el('orderNumber').value,
-        transport,truckHeight,mode,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
+        transport,truckHeight,mode,tariffCriterion:el('tariffCriterion').value,airDivisor:el('airDivisor').value,truckDivisor:el('truckDivisor').value,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
         pallets:pallets.map(p=>({...snapshotPallet(p),manual:composedPallets.includes(p)})),
         draft:assembly?{...snapshotPallet(assembly),floorBoxes:assembly.floorBoxes,level:Number(el('assemblyZ').value),autoLevel:el('assemblyAutoZ').checked}:null};
 }
@@ -3282,6 +3345,110 @@ function clearProjectConflict(){
     el('projectSaveError').textContent='';
 }
 let currentProjectName='';
+const recoveryKey='po_recovery_draft';
+let savedSnapshot;
+let lastDraftSnapshot;
+let recoveryPending=false;
+let exiting=false;
+let saveThenExit=false;
+const exitAppDialog=el('exitAppDialog');
+const recoverProjectDialog=el('recoverProjectDialog');
+const projectSaveDialog=el('projectSaveDialog');
+
+function clearRecoveryDraft(){
+    try{
+        localStorage.removeItem(recoveryKey);
+        lastDraftSnapshot=undefined;
+    }catch{}
+}
+function markProjectClean(){
+    savedSnapshot=JSON.stringify(projectSnapshot());
+    clearRecoveryDraft();
+}
+function warnBeforeLeaving(event){
+    if(exiting||JSON.stringify(projectSnapshot())===savedSnapshot)return;
+    persistRecoveryDraft();
+    event.preventDefault();
+    event.returnValue='';
+}
+function persistRecoveryDraft(){
+    if(savedSnapshot===undefined||recoveryPending||exiting)return;
+    const data=projectSnapshot();
+    const snapshot=JSON.stringify(data);
+    const dirty=snapshot!==savedSnapshot;
+    if(dirty)window.addEventListener('beforeunload',warnBeforeLeaving);
+    else window.removeEventListener('beforeunload',warnBeforeLeaving);
+    if(!dirty){
+        if(lastDraftSnapshot!==undefined)clearRecoveryDraft();
+        return;
+    }
+    if(lastDraftSnapshot===snapshot)return;
+    try{
+        localStorage.setItem(recoveryKey,JSON.stringify({...data,projectName:currentProjectName}));
+        lastDraftSnapshot=snapshot;
+    }catch{}
+}
+function startProjectRecovery(){
+    savedSnapshot=JSON.stringify(projectSnapshot());
+    let project;
+    try{
+        const raw=localStorage.getItem(recoveryKey);
+        if(raw)project=parseProject(JSON.parse(raw));
+    }catch{
+        clearRecoveryDraft();
+    }
+    if(!project)return;
+    recoveryPending=true;
+    recoverProjectDialog.addEventListener('cancel',event=>event.preventDefault());
+    recoverProjectDialog.addEventListener('close',()=>{
+        recoveryPending=false;
+        if(recoverProjectDialog.returnValue==='discard'){
+            clearRecoveryDraft();
+            return;
+        }
+        try{
+            setProject(project);
+            currentProjectName=typeof project.projectName==='string'?project.projectName:'';
+            el('projectMessage').textContent='Bozza recuperata.';
+            persistRecoveryDraft();
+        }catch(error){
+            el('projectMessage').textContent='Impossibile ripristinare la bozza: '+error.message;
+        }
+    },{once:true});
+    recoverProjectDialog.showModal();
+}
+function showExitApp(){
+    const dirty=JSON.stringify(projectSnapshot())!==savedSnapshot;
+    el('exitAppMessage').textContent=dirty?'Il progetto ha modifiche non salvate. Vuoi salvarlo prima di uscire?':'Tornerai alla schermata del PIN.';
+    el('exitAppDiscard').textContent=dirty?'Esci senza salvare':'Esci';
+    el('exitAppSave').hidden=!dirty;
+    exitAppDialog.returnValue='cancel';
+    exitAppDialog.showModal();
+}
+function leaveApp(){
+    exiting=true;
+    window.removeEventListener('beforeunload',warnBeforeLeaving);
+    clearRecoveryDraft();
+    location.reload();
+}
+exitAppDialog.addEventListener('close',()=>{
+    if(exitAppDialog.returnValue==='exit')leaveApp();
+    if(exitAppDialog.returnValue==='save'){
+        saveThenExit=true;
+        saveProject();
+    }
+});
+projectSaveDialog.addEventListener('close',()=>{saveThenExit=false;});
+el('exitApp').onclick=showExitApp;
+el('assemblyExitApp').onclick=showExitApp;
+for(const type of ['input','change','click','pointerup','submit','keydown']){
+    document.addEventListener(type,()=>queueMicrotask(persistRecoveryDraft),true);
+}
+setInterval(persistRecoveryDraft,1000);
+document.addEventListener('visibilitychange',()=>{
+    if(document.hidden)persistRecoveryDraft();
+});
+window.addEventListener('pagehide',persistRecoveryDraft);
 function saveProject(){
     clearProjectConflict();
     const input=el('projectName');
@@ -3290,15 +3457,19 @@ function saveProject(){
     input.focus();
     input.select();
 }
+function jsonAttachment(data,name){
+    return new File([JSON.stringify(data,null,2)],name,{type:'application/json'});
+}
+function projectJsonFile(data,name){
+    const basename=name.replace(/[<>:"/\\|?*]/g,'-').replace(/[. ]+$/,'');
+    return jsonAttachment(data,(basename||'Progetto')+'.json');
+}
 function downloadProject(data,name){
-    const link=document.createElement('a');
-    const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
-    link.href=url;
-    link.download=name.replace(/[<>:"/\\|?*]/g,'-').replace(/[. ]+$/,'')+'.json';
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    downloadAttachment(projectJsonFile(data,name));
+}
+function emailSavedProject(entry){
+    return emailAttachment(()=>projectJsonFile(entry.data,entry.name),'Progetto · '+entry.name,
+        'Ciao,\nin allegato il progetto in formato JSON.');
 }
 function storeProject(name,replace){
     const list=projectArchive(), key=projectNameKey(name);
@@ -3308,6 +3479,7 @@ function storeProject(name,replace){
     if(index>=0)list[index]={name,data};else list.push({name,data});
     localStorage.setItem(projectArchiveKey,JSON.stringify(list));
     currentProjectName=name;
+    markProjectClean();
     return data;
 }
 function submitProjectName(replace=false){
@@ -3329,7 +3501,9 @@ function submitProjectName(replace=false){
         el('projectSaveDialog').close();
         el('projectMessage').textContent='Progetto salvato: '+name;
         if(composeDialog.open)assemblyMessage('Progetto salvato: '+name);
-        downloadProject(data,name);
+        const leaveAfterSave=saveThenExit;
+        try{downloadProject(data,name);}
+        finally{if(leaveAfterSave)setTimeout(leaveApp,0);}
     }catch{
         el('projectSaveError').textContent='Salvataggio non disponibile. Controlla lo spazio del browser.';
     }
@@ -3398,6 +3572,9 @@ function setProject(project){
     el('orderNumber').value=project.order;
     transport=project.transport;truckHeight=project.truckHeight;mode=project.mode==='balanced'?'auto':project.mode;
     el('balanceWeight').checked=project.balanceWeight!==false;
+    el('tariffCriterion').value=project.tariffCriterion==='surface'?'surface':'volume';
+    el('airDivisor').value=Number(project.airDivisor)>=1?project.airDivisor:6000;
+    el('truckDivisor').value=Number(project.truckDivisor)>=1?project.truckDivisor:'';
     el('balanceOption').hidden=mode!=='auto';
     manual.clear();
     for(const i of project.formats)manual.add(i);
@@ -3447,10 +3624,19 @@ el('openProject').onclick=()=>{
                     el('projectOpenDialog').close();
                     setProject(project);
                     currentProjectName=entry.name;
+                    markProjectClean();
                     el('projectMessage').textContent='Progetto aperto: '+entry.name;
                 }catch(error){el('projectMessage').textContent=error.message;}
             };
-            list.append(button);
+            const row=document.createElement('div');
+            row.className='saved-project-actions';
+            const email=document.createElement('button');
+            email.type='button';
+            email.textContent='Invia JSON via email';
+            email.setAttribute('aria-label','Invia JSON via email per '+entry.name);
+            email.onclick=()=>emailSavedProject(entry);
+            row.append(button,email);
+            list.append(row);
         }
     }catch{list.textContent='Archivio locale non disponibile.';}
     el('projectOpenDialog').showModal();
@@ -3552,6 +3738,7 @@ async function loadCloudProjects(append=false){
             cloudDialog.close();
             setProject(project);
             currentProjectName=row.name;
+            markProjectClean();
             el('projectMessage').textContent='Progetto aperto: '+row.name;
         });
     }
@@ -3600,6 +3787,7 @@ el('projectFile').onchange=async event=>{
         if(projectHasWork()&&!confirm('Aprire il progetto e sostituire il lavoro corrente?'))return;
         setProject(project);
         currentProjectName=typeof project.projectName==='string'?project.projectName:'';
+        markProjectClean();
         el('projectMessage').textContent='Progetto aperto.';
     }catch(error){el('projectMessage').textContent=error instanceof SyntaxError?'Il file non contiene JSON valido.':error.message;}
 };
@@ -3607,17 +3795,152 @@ el('newProject').onclick=()=>{
     if(projectHasWork()&&!confirm('Svuotare il lavoro corrente? I progetti esportati e il catalogo restano disponibili.'))return;
     setProject({manifest:[],manualPallets:[],client:'',order:'',transport:'air',truckHeight:180,mode:'auto',formats:[],pallets:[],draft:null});
     currentProjectName='';
+    markProjectClean();
     el('projectMessage').textContent='Nuovo progetto.';
 };
+
+function shipmentPdf(pages){
+    const chunks=[], offsets=[0];
+    let length=0;
+    const write=value=>{
+        const bytes=typeof value==='string'?new TextEncoder().encode(value):value;
+        chunks.push(bytes);
+        length+=bytes.length;
+    };
+    const object=(id,...parts)=>{
+        offsets[id]=length;
+        write(id+' 0 obj\n');
+        for(const part of parts)write(part);
+        write('\nendobj\n');
+    };
+    write('%PDF-1.4\n');
+    object(1,'<< /Type /Catalog /Pages 2 0 R >>');
+    object(2,'<< /Type /Pages /Count '+pages.length+' /Kids ['+
+        pages.map((_,i)=>(3+3*i)+' 0 R').join(' ')+'] >>');
+    pages.forEach((page,i)=>{
+        const id=3+3*i;
+        const image=Uint8Array.from(atob(page.toDataURL('image/jpeg',.85).split(',')[1]),c=>c.charCodeAt(0));
+        const commands='q 595.28 0 0 841.89 0 0 cm /Report Do Q\n';
+        object(id,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Report '+(id+2)+' 0 R >> >> /Contents '+(id+1)+' 0 R >>');
+        object(id+1,'<< /Length '+commands.length+' >>\nstream\n'+commands+'endstream');
+        object(id+2,'<< /Type /XObject /Subtype /Image /Width '+page.width+' /Height '+page.height+
+            ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+image.length+' >>\nstream\n',image,'\nendstream');
+    });
+    const xref=length;
+    write('xref\n0 '+offsets.length+'\n0000000000 65535 f \n');
+    for(const offset of offsets.slice(1))write(String(offset).padStart(10,'0')+' 00000 n \n');
+    write('trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+    return new Blob(chunks,{type:'application/pdf'});
+}
+function shipmentReportTotals(){
+    return [
+        pallets.length+' pallet · Superficie '+(totalPalletArea(pallets)/10000).toLocaleString('it-IT',{maximumFractionDigits:4})+' m²',
+        'Volume '+formatVolume(shipmentVolume(pallets))+' · Peso lordo '+formatShipmentWeight(pallets),
+        ...(currentDivisor()?['Peso volumetrico '+formatVolumetricWeight(pallets)]:[])
+    ];
+}
+function reportPalletImage(pallet){
+    const picture=document.createElement('canvas');
+    picture.width=780;
+    picture.height=460;
+    draw(picture,pallet,flat);
+    return picture;
+}
+function renderShipmentPdf(){
+    const pages=[];
+    const customer=el('orderClient').value||'—',order=el('orderNumber').value||'—';
+    const totals=shipmentReportTotals();
+    for(const [index,pallet] of pallets.entries()){
+        let ctx,y;
+        function newPage(continued=false){
+            const page=document.createElement('canvas');
+            page.width=1000;
+            page.height=1414;
+            pages.push(page);
+            ctx=page.getContext('2d',{alpha:false});
+            ctx.fillStyle='#fff';
+            ctx.fillRect(0,0,page.width,page.height);
+            y=48;
+            line('Pedana '+(index+1)+' di '+pallets.length+(continued?' · continua':''),true);
+        }
+        function line(value,bold=false){
+            ctx.font=(bold?'bold ':'')+'23px sans-serif';
+            ctx.fillStyle='#122034';
+            let row='';
+            for(const char of String(value)){
+                if(ctx.measureText(row+char).width>900){
+                    ctx.fillText(row,50,y+=29);
+                    row='';
+                }
+                row+=char;
+            }
+            ctx.fillText(row,50,y+=29);
+        }
+        newPage();
+        line('Cliente: '+customer);
+        line('Ordine: '+order);
+        for(const total of totals)line(total);
+        line(pallet.l+' × '+pallet.p+' cm · Altezza '+pallet.height+' cm · '+palletWeightFormat.format(pallet.weight)+' kg lordi (tara '+tare+' kg)');
+        line('Volume pedana '+formatVolume(palletVolume(pallet)));
+        ctx.drawImage(reportPalletImage(pallet),208,y+20,584,344);
+        y+=375;
+        for(const [layer,[z,boxes]] of layersOf(pallet).entries()){
+            const heading='Piano '+(layer+1)+' · '+(base+z)+' cm · '+boxes.length+' colli · '+
+                palletWeightFormat.format(boxes.reduce((sum,b)=>sum+b.weight,0))+' kg';
+            if(y>1260)newPage(true);
+            line(heading,true);
+            const types=new Map();
+            for(const box of boxes){
+                const key=[box.id,box.name].filter(Boolean).join(' — ');
+                types.set(key,(types.get(key)||0)+1);
+            }
+            for(const [key,count] of types){
+                if(y>1210){newPage(true);line(heading,true);}
+                line(count+' × '+key);
+            }
+        }
+    }
+    return shipmentPdf(pages);
+}
+function downloadAttachment(file){
+    const url=URL.createObjectURL(file);
+    const link=document.createElement('a');
+    link.href=url;
+    link.download=file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+async function emailAttachment(createFile,title,message){
+    try{
+        const file=createFile();
+        if(navigator.canShare?.({files:[file]})){
+            try{await navigator.share({title,files:[file]});return;}
+            catch(error){if(error.name==='AbortError')return;}
+        }
+        downloadAttachment(file);
+        el('reportEmailName').textContent=file.name;
+        el('reportEmailDraft').href='mailto:?subject='+encodeURIComponent(title)+'&body='+encodeURIComponent(message);
+        el('reportEmailFallback').showModal();
+    }catch(error){alert('Impossibile preparare il file da inviare. '+error.message);}
+}
+function emailShipmentReport(){
+    if(!pallets.length){alert('Calcola le pedane prima di inviare il report.');return;}
+    const order=el('orderNumber').value.trim();
+    const suffix=order.replace(/[^\p{L}\p{N}_-]+/gu,'-').slice(0,60);
+    const title='Report spedizione'+(order?' · '+order:'');
+    return emailAttachment(()=>new File([renderShipmentPdf()],'Report-spedizione'+(suffix?'-'+suffix:'')+'.pdf',
+        {type:'application/pdf'}),title,'Ciao,\nin allegato il report della spedizione.');
+}
 
 async function printOrder(){
     if(!pallets.length){alert('Calcola le pedane prima di stampare.');return;}
     const root=el('printReportRoot');
     const customer=escapeText(el('orderClient').value||'—'),order=escapeText(el('orderNumber').value||'—');
     root.innerHTML=pallets.map((p,i)=>{
-        const picture=document.createElement('canvas');
-        picture.width=780;picture.height=460;draw(picture,p,flat);
-        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> '+customer+'</p><p><strong>Ordine</strong> '+order+'</p></header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
+        const picture=reportPalletImage(p);
+        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> '+customer+'</p><p><strong>Ordine</strong> '+order+'</p>'+shipmentReportTotals().map(value=>'<p>'+escapeText(value)+'</p>').join('')+'</header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
     }).join('');
     await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
     root.classList.add('measuring');
@@ -3650,7 +3973,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
@@ -3674,6 +3997,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
         form.reset();
         dialog.close();
         document.body.classList.remove('pin-locked');
+        startProjectRecovery();
     });
     dialog.showModal();
 })();
