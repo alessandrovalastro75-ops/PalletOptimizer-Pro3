@@ -32,7 +32,7 @@ h2{color:var(--gold);font-size:clamp(17px,1.9vw,28px);line-height:1.15}h2 i{font
 #optimizationPercent{font-variant-numeric:tabular-nums}
 #optimizationProgress{display:block;width:100%;height:16px;margin-top:4px;accent-color:#298254}
 </style><style>
-.options{margin-top:12px}.options button{white-space:nowrap}.height-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:12px}.height-row small{color:#c3cfe3}.height-picker{position:relative}.height-picker button{min-width:90px}.height-picker #heightOptions{position:absolute;z-index:10;top:100%;left:0;width:235px;max-width:70vw;background:#0b172b;border:1px solid #50658a;border-radius:12px;padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;box-shadow:0 12px 30px #0009}
+.options{margin-top:12px}.options button{white-space:nowrap}.height-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-top:12px}.height-row small{color:#c3cfe3}.height-picker{position:relative}.height-picker button{min-width:90px}.height-picker .height-options{position:absolute;z-index:10;top:100%;left:0;width:235px;max-width:70vw;background:#0b172b;border:1px solid #50658a;border-radius:12px;padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:4px;box-shadow:0 12px 30px #0009}
 [hidden]{display:none!important}
 .height-option{display:flex;align-items:center;justify-content:center;gap:6px}
 .height-option svg{height:27px;width:24px;flex:none}
@@ -209,7 +209,7 @@ html,body{background:#fff}
         color: var(--ink);
     }
     input::placeholder { color: #57697e; opacity: 1; }
-    .height-picker #heightOptions { background: var(--surface); border-color: var(--surface-line); }
+    .height-picker .height-options { background: var(--surface); border-color: var(--surface-line); }
 
     nav button, .dashboard button, .dashboard select, #viewerLayer,
     #productDialog button, #manualDialog button, #detailDialog form button,
@@ -827,10 +827,13 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <button class="gold" data-transport="air" aria-pressed="true">✈ Via aerea</button>
 <button data-transport="truck" aria-pressed="false">🚚 Via camion</button>
 </div>
-<div class="height-row"><span>Altezza massima</span><select id="airHeight" aria-label="Altezza massima"><option value="140">140 cm</option><option value="150">150 cm</option></select>
+<div class="height-row"><span>Altezza massima</span><div class="height-picker" id="airHeight">
+<button id="airHeightToggle" type="button" aria-expanded="false" aria-controls="airHeightOptions"></button>
+<div id="airHeightOptions" class="height-options" hidden></div>
+</div>
 <div class="height-picker" id="truckHeight" hidden>
 <button id="heightToggle" type="button" aria-expanded="false" aria-controls="heightOptions"></button>
-<div id="heightOptions" hidden></div>
+<div id="heightOptions" class="height-options" hidden></div>
 </div><small>750 kg lordi per pedana</small></div>
 <div class="tariff-controls">
 <label>Criterio di spedizione <select id="tariffCriterion"><option value="volume">Peso volumetrico</option><option value="surface">Superficie a terra</option></select></label>
@@ -2670,24 +2673,49 @@ function press(container,attribute,value){
         b.setAttribute('aria-pressed',selected);
     }
 }
-el('heightOptions').innerHTML=heights.map(h=>'<button class="height-option" data-height="'+h+'">'+icon(h)+'<span>'+h+' cm</span></button>').join('');
+const heightPickers=[
+    {root:el('airHeight'),toggle:el('airHeightToggle'),options:el('airHeightOptions'),
+        values:[140,150],get:()=>airHeight,set:value=>{airHeight=value;}},
+    {root:el('truckHeight'),toggle:el('heightToggle'),options:el('heightOptions'),
+        values:heights,get:()=>truckHeight,set:value=>{truckHeight=value;}}
+];
+function setHeightPickerOpen(picker,open){
+    picker.options.hidden=!open;
+    picker.toggle.setAttribute('aria-expanded',String(open));
+}
 function heightDisplay(){
-    el('heightToggle').innerHTML='<span class="height-option">'+icon(truckHeight)+truckHeight+' cm ▾</span>';
-    el('heightOptions').hidden=true;
-    el('heightToggle').setAttribute('aria-expanded','false');
+    for(const picker of heightPickers){
+        const value=picker.get();
+        picker.toggle.innerHTML='<span class="height-option">'+icon(value)+value+' cm ▾</span>';
+        for(const button of picker.options.querySelectorAll('button')){
+            button.setAttribute('aria-pressed',String(Number(button.dataset.height)===value));
+        }
+        setHeightPickerOpen(picker,false);
+    }
+}
+for(const picker of heightPickers){
+    picker.options.innerHTML=picker.values.map(value=>'<button type="button" class="height-option" data-height="'+value+'">'+icon(value)+'<span>'+value+' cm</span></button>').join('');
+    picker.toggle.onclick=()=>setHeightPickerOpen(picker,picker.options.hidden);
+    picker.options.onclick=event=>{
+        const button=event.target.closest('[data-height]');
+        if(!button)return;
+        picker.set(Number(button.dataset.height));
+        heightDisplay();
+        picker.toggle.focus();
+    };
+    picker.root.addEventListener('keydown',event=>{
+        if(event.key!=='Escape'||picker.options.hidden)return;
+        event.preventDefault();
+        setHeightPickerOpen(picker,false);
+        picker.toggle.focus();
+    });
 }
 heightDisplay();
-el('airHeight').onchange=event=>{airHeight=Number(event.currentTarget.value);};
-el('heightToggle').onclick=()=>{
-    el('heightOptions').hidden=!el('heightOptions').hidden;
-    el('heightToggle').setAttribute('aria-expanded',!el('heightOptions').hidden);
-};
-el('heightOptions').onclick=e=>{
-    const b=e.target.closest('[data-height]');
-    if(b){truckHeight=Number(b.dataset.height);heightDisplay();el('heightToggle').focus();}
-};
-document.addEventListener('click',e=>{if(!el('truckHeight').contains(e.target))heightDisplay()});
-el('truckHeight').addEventListener('keydown',e=>{if(e.key==='Escape'){heightDisplay();el('heightToggle').focus();}});
+document.addEventListener('click',event=>{
+    for(const picker of heightPickers){
+        if(!picker.root.contains(event.target))setHeightPickerOpen(picker,false);
+    }
+});
 el('transport').onclick=e=>{
     const b=e.target.closest('[data-transport]');
     if(!b)return;
@@ -4252,7 +4280,6 @@ function setProject(project){
     el('orderNumber').value=project.order;
     transport=project.transport;truckHeight=project.truckHeight;
     airHeight=project.airHeight??140;
-    el('airHeight').value=String(airHeight);
     mode=project.mode==='balanced'?'auto':project.mode;
     el('balanceWeight').checked=project.balanceWeight===true;
     el('tariffCriterion').value=project.tariffCriterion==='surface'?'surface':'volume';
@@ -4692,7 +4719,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
