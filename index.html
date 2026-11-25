@@ -440,6 +440,7 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 </style><script>let appLanguage='it';
 try{if(localStorage.getItem('po_language')==='en')appLanguage='en';}catch{}
 const englishLabels={
+    "Impossibile mostrare il risultato. Premi «Calcola Ottimizzazione» per riprovare.":"Unable to display the result. Select Calculate optimization to try again.",
     "Sblocca pedana":"Unlock pallet",
     "Blocca pedana":"Lock pallet",
     "Ricalcola pedane libere":"Recalculate unlocked pallets",
@@ -2443,6 +2444,9 @@ function palletVolume(pallet){
 function shipmentVolume(project){
     return project.reduce((sum,pallet)=>sum+palletVolume(pallet),0);
 }
+function hasHeavyUpperBoxes(plan){
+    return plan.some(pallet=>heavyUpperBoxes(pallet).length);
+}
 function tallestPallet(plan){
     return Math.max(...plan.map(pallet=>pallet.height));
 }
@@ -2511,9 +2515,6 @@ function planWithHeavyLow(items,dims,height){
     return plan;
 }
 const palletAreaTolerance=0.05;
-function hasHeavyUpperBoxes(plan){
-    return plan.some(pallet=>heavyUpperBoxes(pallet).length);
-}
 function separateArticlesPlan(items,dims,height){
     const groups=new Map();
     for(const box of items){
@@ -2894,21 +2895,30 @@ function calculateOrder(selected=0){
                 showOptimizationProgress(null,'Impossibile disporre tutti i colli con i limiti selezionati.');
                 return;
             }
-            const {compact,shorter,lower,heavy}=data.result;
-            showOptimizationProgress(100,'Ottimizzazione completata.');
-            if(heavy||compact.fewer||compact.alternate){
-                const args=[compact,shorter,lower,heavy,height,selected,byVolume];
-                optimizationAlternatives={snapshot,args,choice:0};
-                reviewAlternatives.hidden=false;
-                openShipmentReview(...args);
-                return;
+            try{
+                const {compact,shorter,lower,heavy}=data.result;
+                if(heavy||compact.fewer||compact.alternate){
+                    const args=[compact,shorter,lower,heavy,height,selected,byVolume];
+                    optimizationAlternatives={snapshot,args,choice:0};
+                    reviewAlternatives.hidden=false;
+                    openShipmentReview(...args);
+                    showOptimizationProgress(100,'Ottimizzazione completata.');
+                    return;
+                }
+                for(const pallet of compact.minimum)pallet.maxHeight=height;
+                publishProject([...fixed,...compact.minimum],selected);
+                const reason=el('optimizationReason');
+                reason.textContent=byVolume?'Volume più basso tra le disposizioni trovate.':
+                    'Superficie a terra più piccola tra le disposizioni trovate.';
+                reason.hidden=false;
+                showOptimizationProgress(100,'Ottimizzazione completata.');
+            }catch(error){
+                console.error(error);
+                clearOptimizationAlternatives();
+                const dialog=el('heavyReviewDialog');
+                if(dialog.open)dialog.close();
+                showOptimizationProgress(null,'Impossibile mostrare il risultato. Premi «Calcola Ottimizzazione» per riprovare.');
             }
-            for(const pallet of compact.minimum)pallet.maxHeight=height;
-            publishProject([...fixed,...compact.minimum],selected);
-            const reason=el('optimizationReason');
-            reason.textContent=byVolume?'Volume più basso tra le disposizioni trovate.':
-                'Superficie a terra più piccola tra le disposizioni trovate.';
-            reason.hidden=false;
         };
         worker.postMessage(input);
     }catch(error){
@@ -3016,8 +3026,8 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
         dialog.close();
         publishProject(plans[choice],Math.min(selected,plans[choice].length-1));
     };
-    dialog.showModal();
     choose(initialChoice);
+    dialog.showModal();
 }
 function publishProject(project, selected=0){
     el("optimizationReason").hidden=true;
@@ -4719,7 +4729,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
