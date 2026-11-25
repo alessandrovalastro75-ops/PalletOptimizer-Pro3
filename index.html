@@ -827,7 +827,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <button class="gold" data-transport="air" aria-pressed="true">✈ Via aerea</button>
 <button data-transport="truck" aria-pressed="false">🚚 Via camion</button>
 </div>
-<div class="height-row"><span>Altezza massima</span><strong id="airHeight">140 cm</strong>
+<div class="height-row"><span>Altezza massima</span><select id="airHeight" aria-label="Altezza massima"><option value="140">140 cm</option><option value="150">150 cm</option></select>
 <div class="height-picker" id="truckHeight" hidden>
 <button id="heightToggle" type="button" aria-expanded="false" aria-controls="heightOptions"></button>
 <div id="heightOptions" hidden></div>
@@ -841,7 +841,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <div id="packingModes" class="seg options">
 <button class="gold" data-mode="auto" aria-pressed="true">Automatica</button>
 <button data-mode="manual" aria-pressed="false">Automatica con scelta formato pedane</button>
-</div><label id="balanceOption"><input id="balanceWeight" type="checkbox" checked> Bilancia il peso come ultimo spareggio</label><div id="formats" aria-label="Formati pallet"></div></section>
+</div><label id="balanceOption"><input id="balanceWeight" type="checkbox"> Bilancia il peso come ultimo spareggio</label><div id="formats" aria-label="Formati pallet"></div></section>
 <section class="panel padded"><h2>Articoli da pallettizzare</h2><div class="article-actions"><button onclick="openCatalogModal()">📦 Catalogo (<span id="catalogCount">4</span>)</button><button type="button" class="add" onclick="openProductPicker()" aria-haspopup="dialog">＋ &nbsp; Aggiungi Prodotto</button></div>
 <div id="manifestCountBadge" hidden></div><div id="manifestList"></div></section>
 <section class="panel padded"><h2>Disposizione manuale</h2><div class="article-actions"><button type="button" id="openCompose">Apri disposizione manuale</button></div></section>
@@ -2233,7 +2233,7 @@ function compactUpperLayers(pallet,height){
         return;
     }
 }
-function planOrder(items,dims,height,balanced,allowFlatBase=false,byVolume=false){
+function planOrder(items,dims,height,allowFlatBase=false){
     items=items.map(box=>({...box,format:boxFormat(box)}));
     const upright=buildPlan(items,dims,height,false,allowFlatBase);
     const alternative=items.some(smallestFace)?buildPlan(items,dims,height,true,allowFlatBase):null;
@@ -2253,7 +2253,6 @@ function planOrder(items,dims,height,balanced,allowFlatBase=false,byVolume=false
         if(separated&&separated.length===plan.length&&totalPalletArea(separated)<=totalPalletArea(plan)&&
             separated.reduce((sum,p)=>sum+articleMix(p),0)<plan.reduce((sum,p)=>sum+articleMix(p),0))plan=separated;
     }
-    if(balanced&&plan?.length>1)plan=rebalancePlan(items,plan,height,byVolume);
     const originals=new Map(items.map(box=>[box.kind,box]));
     if(plan)for(const pallet of plan){
         if(allowFlatBase){
@@ -2435,31 +2434,6 @@ function buildPlan(items,dims,height,allowSmallFace,allowFlatBase,layered=false,
     }
     return out;
 }
-function rebalancePlan(items,out,height,byVolume=false){
-    const allowSmallFace=out.some(p=>p.boxes.some(box=>box.smallFace));
-    const spread=plan=>Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
-    const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
-    const stacking=plan=>plan.reduce((sum,p)=>sum+stackedHeavyPairs(p),0);
-    const meanWeight=tare+items.reduce((s,b)=>s+b.weight,0)/out.length;
-    const sorted=[...items].sort((a,b)=>b.l*b.p-a.l*a.p||b.h-a.h||b.weight-a.weight);
-    const originalInversions=inversions(out),originalStacking=stacking(out);
-    const largestArea=Math.max(...out.map(p=>p.l*p.p));
-    const smallerPallets=out.flatMap((p,index)=>p.l*p.p<largestArea?[index]:[]);
-    let best=out;
-    for(const slack of [1.08,1.2,1.5,Infinity]){
-        const plan=out.map(p=>({...emptyPallet([p.l,p.p]),allowSmallFace}));
-        const weight=Number.isFinite(slack)?Math.min(weightLimit,tare+(meanWeight-tare)*slack):weightLimit;
-        const place=(box,floorOnly)=>[...plan].sort((a,b)=>a.weight-b.weight||a.volume-b.volume)
-            .some(p=>put(p,box,height,weight,Infinity,floorOnly));
-        const aboveFloor=sorted.filter(box=>!place(box,true));
-        if(aboveFloor.every(box=>place(box,false))&&plan.every(p=>p.boxes.length)&&
-            spread(plan)+1e-8<spread(best)&&inversions(plan)<=originalInversions+1e-8&&
-            stacking(plan)<=originalStacking&&baseLayerDeficit(plan)<=baseLayerDeficit(best)&&
-            (byVolume?compareVolumeShipments(plan,best,false):compareShipments(plan,best))<=0&&
-            smallerPallets.every(index=>plan[index].height<=best[index].height+1e-8))best=plan;
-    }
-    return best;
-}
 function palletVolume(pallet){
     return pallet.l*pallet.p*pallet.height/1e6;
 }
@@ -2475,17 +2449,18 @@ let composedPallets;
 function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,manualPallets},report){
     composedPallets=manualPallets;
     const items=remaining.flatMap(box=>Array.from({length:box.qty},()=>({...box})));
-    const initial=planOrder(items,dims,height,balanced,automatic,byVolume);
+    const initial=planOrder(items,dims,height,automatic);
     if(!initial)return null;
     report(20,'Confronto dei formati delle pedane…');
     let heavy=hasHeavyUpperBoxes(initial);
-    const findPlan=formats=>planOrder(items,formats,height,balanced,automatic,byVolume);
-    const compare=byVolume?(a,b)=>compareVolumeShipments(a,b,balanced):(a,b)=>compareGlobalShipments(a,b,balanced);
+    const findPlan=formats=>planOrder(items,formats,height,automatic);
+    const compareBase=byVolume?compareVolumeShipments:compareGlobalShipments;
+    const compare=(a,b)=>compareBase(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0);
     let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy,false,compare,byVolume);
     report(45,'Ricerca delle disposizioni per la spedizione…');
     const initialCompact=compact;
     if((automatic&&compact.minimum.length>1)||byVolume){
-        const global=searchShipmentLayouts(items,dims,height,compact,false,compare,byVolume,
+        const global=searchShipmentLayouts(items,dims,height,compact,false,compareBase,byVolume,
             fraction=>report(45+25*fraction,'Ricerca delle disposizioni per la spedizione…'));
         compact=rankShipmentChoices([compact.minimum,compact.fewer,compact.alternate,...global].filter(Boolean),compare,byVolume);
         heavy=hasHeavyUpperBoxes(compact.minimum)||Boolean(compact.fewer&&hasHeavyUpperBoxes(compact.fewer));
@@ -2498,7 +2473,7 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
             .filter(plan=>plan&&!hasHeavyUpperBoxes(plan));
         if(safe.length){
             lower=rankShipmentChoices(safe,compare,byVolume);
-            const global=searchShipmentLayouts(items,dims,height,lower,true,compare,byVolume,
+            const global=searchShipmentLayouts(items,dims,height,lower,true,compareBase,byVolume,
                 fraction=>report(70+25*fraction,'Verifica della distribuzione dei pesi…'));
             lower=rankShipmentChoices([...safe,...global],compare,byVolume);
         }
@@ -2545,7 +2520,7 @@ function separateArticlesPlan(items,dims,height){
     if(groups.size<2)return null;
     const result=[];
     for(const group of groups.values()){
-        const plans=dims.map(dim=>planOrder(group,[dim],height,false,true)).filter(Boolean);
+        const plans=dims.map(dim=>planOrder(group,[dim],height,true)).filter(Boolean);
         plans.sort((a,b)=>a.length-b.length||comparePalletSurface(a,b));
         if(!plans.length)return null;
         result.push(...plans[0]);
@@ -2590,14 +2565,14 @@ function rankShipmentChoices(candidates,compare=comparePalletSurface,byVolume=fa
 function shipmentWeightSpread(plan){
     return Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
 }
-function compareGlobalShipments(a,b,balanced){
+function compareGlobalShipments(a,b){
     return comparePalletSurface(a,b)||
         Number(hasHeavyUpperBoxes(a))-Number(hasHeavyUpperBoxes(b))||
-        compareShipments(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0);
+        compareShipments(a,b);
 }
-function compareVolumeShipments(a,b,balanced){
+function compareVolumeShipments(a,b){
     return Math.round((shipmentVolume(a)-shipmentVolume(b))*1e6)||
-        a.length-b.length||compareGlobalShipments(a,b,balanced);
+        a.length-b.length||compareGlobalShipments(a,b);
 }
 // Explore complete shipments while retaining several ways to allocate the remaining cartons.
 function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,byVolume,report){
@@ -2669,7 +2644,7 @@ function findShorterHeavyPlan(items,dims,height,compact,lower){
     const candidates=[];
     for(const dim of dims){
         if(dim[0]*dim[1]>=areaLimit)continue;
-        const plan=planOrder(items,[dim],height,false,true);
+        const plan=planOrder(items,[dim],height,true);
         if(plan&&plan.length<=compact.length&&totalPalletArea(plan)<areaLimit&&
             tallestPallet(plan)<maximumHeight&&plan.some(p=>heavyUpperBoxes(p).length))candidates.push(plan);
     }
@@ -2681,7 +2656,7 @@ function findShorterHeavyPlan(items,dims,height,compact,lower){
 const formats=[[114,114],[80,120],[60,80],[80,80]];
 const heights=[150,160,170,180,190,200,210,220];
 const manual=new Set();
-let transport='air', truckHeight=180, mode='auto', pallets=[], active=0, flat=false;
+let transport='air', airHeight=140, truckHeight=180, mode='auto', pallets=[], active=0, flat=false;
 let yaw=-.65,pitch=.56,drag;
 const canvas=el('palletCanvas');
 function icon(height){
@@ -2702,6 +2677,7 @@ function heightDisplay(){
     el('heightToggle').setAttribute('aria-expanded','false');
 }
 heightDisplay();
+el('airHeight').onchange=event=>{airHeight=Number(event.currentTarget.value);};
 el('heightToggle').onclick=()=>{
     el('heightOptions').hidden=!el('heightOptions').hidden;
     el('heightToggle').setAttribute('aria-expanded',!el('heightOptions').hidden);
@@ -2804,7 +2780,7 @@ function optimizationInputs(){
     return {
         remaining:unassignedManifest(fixed),
         dims:mode==='manual'?[...manual].map(i=>formats[i]):formats,
-        height:transport==='air'?140:truckHeight,
+        height:shippingHeight(),
         automatic,
         balanced:automatic&&el('balanceWeight').checked,
         byVolume:el('tariffCriterion').value==='volume',
@@ -3309,7 +3285,7 @@ function manualPositionError(pallet,original,position){
     const upright=manifest[moved.kind]||original;
     if((moved.smallFace||moved.h!==upright.h)&&!canRotateOnSide(moved))
         return 'La posa sul lato è consentita solo con peso inferiore a 8 kg e lato corto inferiore a 30 cm.';
-    if(base+moved.z+moved.h>(pallet.maxHeight??(transport==='air'?140:truckHeight))+eps)
+    if(base+moved.z+moved.h>(pallet.maxHeight??shippingHeight())+eps)
         return 'La scatola supera l’altezza massima della spedizione.';
     if(moved.x < -eps||moved.y < -eps||moved.x+moved.l>pallet.l+eps||moved.y+moved.p>pallet.p+eps)
         return 'La scatola esce dal perimetro della pedana.';
@@ -3587,7 +3563,7 @@ let assemblyAngle=-.65, assemblyPitch=.58, orbitAssembly=false;
 let assemblyFrame=45, assemblyFrameRequest=null, assemblyLatestPointer=null;
 const assemblyDragThreshold=5;
 function assemblyMargin(){return Math.max(65,...manifest.map(box=>Math.max(box.l,box.p,box.h)+10));}
-function shippingHeight(){return transport==='air'?140:truckHeight;}
+function shippingHeight(){return transport==='air'?airHeight:truckHeight;}
 function assignedManualQuantity(id){
     return composedPallets.reduce((total,pallet)=>total+pallet.boxes.filter(box=>box.id===id).length,0);
 }
@@ -4027,7 +4003,7 @@ function projectSnapshot(){
     const snapshotPallet=p=>({l:p.l,p:p.p,maxHeight:p.maxHeight,boxes:p.boxes});
     return {type:'PalletOptimizerProject',version:1,
         client:el('orderClient').value,order:el('orderNumber').value,
-        transport,truckHeight,mode,tariffCriterion:el('tariffCriterion').value,airDivisor:el('airDivisor').value,truckDivisor:el('truckDivisor').value,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
+        transport,airHeight,truckHeight,mode,tariffCriterion:el('tariffCriterion').value,airDivisor:el('airDivisor').value,truckDivisor:el('truckDivisor').value,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
         pallets:pallets.map(p=>({...snapshotPallet(p),manual:composedPallets.includes(p)})),
         draft:assembly?{...snapshotPallet(assembly),floorBoxes:assembly.floorBoxes,level:Number(el('assemblyZ').value),autoLevel:el('assemblyAutoZ').checked}:null};
 }
@@ -4220,7 +4196,7 @@ function parseProject(data){
         if(!condition)throw new Error('Il file non è un progetto PalletOptimizer Pro valido.');
     }
     requireValid(data?.type==='PalletOptimizerProject'&&data.version===1&&typeof data.client==='string'&&typeof data.order==='string'&&
-        ['air','truck'].includes(data.transport)&&heights.includes(data.truckHeight)&&['auto','balanced','manual'].includes(data.mode)&&
+        ['air','truck'].includes(data.transport)&&heights.includes(data.truckHeight)&&(data.airHeight===undefined||[140,150].includes(data.airHeight))&&['auto','balanced','manual'].includes(data.mode)&&
         Array.isArray(data.formats)&&data.formats.every(i=>Number.isInteger(i)&&formats[i])&&Array.isArray(data.manifest)&&Array.isArray(data.pallets));
     const items=readCatalogJSON(data.manifest).map(({image,...row},i)=>{
         const qty=data.manifest[i].qty;
@@ -4274,8 +4250,11 @@ function setProject(project){
     composedPallets=project.manualPallets;
     el('orderClient').value=project.client;
     el('orderNumber').value=project.order;
-    transport=project.transport;truckHeight=project.truckHeight;mode=project.mode==='balanced'?'auto':project.mode;
-    el('balanceWeight').checked=project.balanceWeight!==false;
+    transport=project.transport;truckHeight=project.truckHeight;
+    airHeight=project.airHeight??140;
+    el('airHeight').value=String(airHeight);
+    mode=project.mode==='balanced'?'auto':project.mode;
+    el('balanceWeight').checked=project.balanceWeight===true;
     el('tariffCriterion').value=project.tariffCriterion==='surface'?'surface':'volume';
     el('airDivisor').value=Number(project.airDivisor)>=1?project.airDivisor:6000;
     el('truckDivisor').value=Number(project.truckDivisor)>=1?project.truckDivisor:'';
@@ -4310,7 +4289,7 @@ function setProject(project){
 }
 function projectHasWork(){
     return Boolean(manifest.length||el('orderClient').value||el('orderNumber').value||
-        pallets.length||transport!=='air'||truckHeight!==180||mode!=='auto'||manual.size);
+        pallets.length||transport!=='air'||airHeight!==140||truckHeight!==180||mode!=='auto'||manual.size);
 }
 el('saveProject').onclick=saveProject;
 el('assemblySaveProject').onclick=saveProject;
@@ -4713,7 +4692,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
