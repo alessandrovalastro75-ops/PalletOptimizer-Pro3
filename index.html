@@ -440,6 +440,13 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 </style><script>let appLanguage='it';
 try{if(localStorage.getItem('po_language')==='en')appLanguage='en';}catch{}
 const englishLabels={
+"Pedane meno slanciate":"Less slender pallets",
+"Pedana alta e stretta. Verifica la stabilità e il fissaggio prima del trasporto.":"Tall, narrow pallet. Check stability and securing before transport.",
+"Confronta volume, superficie e proporzioni delle pedane.":"Compare volume, floor area and pallet proportions.",
+"Differenza di volume":"Volume difference",
+"Pedana alta e stretta":"Tall, narrow pallet",
+"Baricentro stimato dei colli":"Estimated carton center of gravity",
+
     "Impossibile mostrare il risultato. Premi «Calcola Ottimizzazione» per riprovare.":"Unable to display the result. Select Calculate optimization to try again.",
     "Sblocca pedana":"Unlock pallet",
     "Blocca pedana":"Lock pallet",
@@ -810,7 +817,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 #heavyReviewChoices dd{margin:0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .review-reason{display:grid;gap:4px;font-size:.82em}
 #lockPallet[aria-pressed="true"]{outline:2px solid #ffba09}
-</style></head><body class="pin-locked">
+</style><style>#palletStabilityWarning,#palletCargoCenter{margin:8px 12px}#palletStabilityWarning{font-weight:700;border-inline-start:3px solid #ffba09;padding-inline-start:8px}</style></head><body class="pin-locked">
 <header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa report</button><button type="button" onclick="emailShipmentReport()">Invia report via email</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav><div class="app-language" role="group" aria-label="Lingua / Language"><button type="button" data-app-language="it" aria-pressed="true">IT</button><button type="button" data-app-language="en" aria-pressed="false">EN</button></div></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
@@ -854,7 +861,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <div id="viewSwitch" class="view-switch"><button class="gold" id="view3" aria-pressed="true">3D</button><button id="view2" aria-pressed="false">2D</button></div>
 <canvas id="palletCanvas" width="900" height="600" hidden aria-label="Schema della pedana"></canvas>
 <div id="viewerLayers" hidden><label for="viewerLayer">Piano della pedana</label><select id="viewerLayer"></select><ul id="viewerLayerItems" aria-live="polite"></ul></div>
-<div id="articleLegend" hidden aria-label="Legenda colori degli articoli"></div><p id="emptyViewer" hidden>Nessuna pedana da visualizzare</p><div id="viewFooter"><button id="prevPallet" aria-label="Pedana precedente" disabled>‹</button><strong id="palletPosition">Pallet dimostrativo</strong><button id="nextPallet" aria-label="Pedana successiva" disabled>›</button><span id="palletVolume" hidden></span><button id="showDetails" disabled>Visualizza dettagli pedana</button><button type="button" id="lockPallet" hidden aria-pressed="false">Blocca pedana</button><button type="button" id="recalculateUnlocked" hidden>Ricalcola pedane libere</button><button id="editPallet" disabled>Modifica disposizione manualmente</button></div>
+<p id="palletStabilityWarning" role="status" hidden></p><p id="palletCargoCenter" hidden></p><div id="articleLegend" hidden aria-label="Legenda colori degli articoli"></div><p id="emptyViewer" hidden>Nessuna pedana da visualizzare</p><div id="viewFooter"><button id="prevPallet" aria-label="Pedana precedente" disabled>‹</button><strong id="palletPosition">Pallet dimostrativo</strong><button id="nextPallet" aria-label="Pedana successiva" disabled>›</button><span id="palletVolume" hidden></span><button id="showDetails" disabled>Visualizza dettagli pedana</button><button type="button" id="lockPallet" hidden aria-pressed="false">Blocca pedana</button><button type="button" id="recalculateUnlocked" hidden>Ricalcola pedane libere</button><button id="editPallet" disabled>Modifica disposizione manualmente</button></div>
 </section>
 <section class="panel padded metrics"><h3>📊 &nbsp; Risultati</h3><p id="status">In attesa del calcolo</p><p id="optimizationReason" hidden></p><div class="stats"><div><strong id="volume">—</strong>Utilizzo volume</div><div><strong id="boxes">—</strong>Scatole</div><div><strong id="layers">—</strong>Strati</div></div><p class="shipment-volume">Volume finale <strong id="shipmentVolume">—</strong></p></section>
 <section class="panel padded loads"><h3>⚖ &nbsp; Riepilogo Carichi</h3><div class="stats"><div>Sinistra<strong id="leftLoad">—</strong></div><div>Destra<strong id="rightLoad">—</strong></div></div></section>
@@ -916,6 +923,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <button id="reviewCompact" type="button" aria-pressed="true"></button>
 <button id="reviewCompactFewer" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLowerFewer" type="button" aria-pressed="false" hidden></button>
+<button id="reviewLessSlender" type="button" aria-pressed="false" hidden></button>
 <button id="reviewShorter" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLower" type="button" aria-pressed="false"></button>
 </div>
@@ -2447,6 +2455,21 @@ function shipmentVolume(project){
 function hasHeavyUpperBoxes(plan){
     return plan.some(pallet=>heavyUpperBoxes(pallet).length);
 }
+function palletSlenderness(pallet){
+    return pallet.height/Math.min(pallet.l,pallet.p);
+}
+function isTallNarrowPallet(pallet){
+    // A geometric screening flag, not a transport or securing limit.
+    return palletSlenderness(pallet)>=2.5;
+}
+function cargoCenter(pallet){
+    const weight=pallet.boxes.reduce((sum,box)=>sum+box.weight,0);
+    if(!weight)return null;
+    return ['x','y','z'].map((axis,index)=>{
+        const size=['l','p','h'][index];
+        return pallet.boxes.reduce((sum,box)=>sum+box.weight*(box[axis]+box[size]/2),0)/weight;
+    });
+}
 function tallestPallet(plan){
     return Math.max(...plan.map(pallet=>pallet.height));
 }
@@ -2460,7 +2483,12 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
     if(!initial)return null;
     report(20,'Confronto dei formati delle pedane…');
     let heavy=hasHeavyUpperBoxes(initial);
-    const findPlan=formats=>planOrder(items,formats,height,automatic);
+    const singleFormatPlans=new Map();
+    const findPlan=formats=>{
+        const plan=planOrder(items,formats,height,automatic);
+        if(formats.length===1)singleFormatPlans.set(formats[0],plan);
+        return plan;
+    };
     const compareBase=byVolume?compareVolumeShipments:compareGlobalShipments;
     const compare=(a,b)=>compareBase(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0);
     let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy,false,compare,byVolume);
@@ -2487,6 +2515,20 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
     }
     report(95,'Preparazione del risultato…');
     const shorter=heavy&&!byVolume&&lower?.minimum&&findShorterHeavyPlan(items,dims,height,compact.minimum,lower.minimum);
+    if(compact.minimum.some(isTallNarrowPallet)){
+        const maxRatio=plan=>Math.max(...plan.map(palletSlenderness));
+        const ratio=maxRatio(compact.minimum);
+        const alternatives=[compact.fewer,compact.alternate,shorter,lower?.minimum,lower?.fewer];
+        for(const dim of dims){
+            if(Math.min(...dim)<=Math.min(...compact.minimum.filter(isTallNarrowPallet).map(p=>Math.min(p.l,p.p))))continue;
+            if(!singleFormatPlans.has(dim))findPlan([dim]);
+            alternatives.push(singleFormatPlans.get(dim));
+        }
+        const alreadyShown=[compact.fewer,compact.alternate,shorter,lower?.minimum,lower?.fewer];
+        const better=alternatives.filter(plan=>plan&&maxRatio(plan)<ratio-1e-8);
+        better.sort((a,b)=>maxRatio(a)-maxRatio(b)||a.length-b.length||compare(a,b));
+        if(better.length&&!alreadyShown.includes(better[0]))compact.lessSlender=better[0];
+    }
     return {compact,shorter,lower,heavy};
 }
 self.onmessage=({data})=>{
@@ -2897,7 +2939,7 @@ function calculateOrder(selected=0){
             }
             try{
                 const {compact,shorter,lower,heavy}=data.result;
-                if(heavy||compact.fewer||compact.alternate){
+                if(heavy||compact.fewer||compact.alternate||compact.lessSlender||[...fixed,...compact.minimum].some(isTallNarrowPallet)){
                     const args=[compact,shorter,lower,heavy,height,selected,byVolume];
                     optimizationAlternatives={snapshot,args,choice:0};
                     reviewAlternatives.hidden=false;
@@ -2932,6 +2974,7 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
     const options=[
         {plan:compact.fewer,reference:compact.minimum,button:el('reviewCompactFewer'),label:'Consigliata · meno pedane'},
         {plan:compact.minimum,button:el('reviewCompact'),label:byVolume?'Volume minimo':'Superficie minima'},
+        {plan:compact.lessSlender,button:el('reviewLessSlender'),label:'Pedane meno slanciate'},
         {plan:shorter||compact.alternate,button:el('reviewShorter'),label:shorter?'Altezza ridotta':'Superficie minima'},
         {plan:lower?.fewer,reference:lower?.minimum,button:el('reviewLowerFewer'),label:'Colli pesanti in basso · consigliata'},
         {plan:lower?.minimum,button:el('reviewLower'),label:byVolume?'Colli pesanti in basso · volume minimo':'Colli pesanti in basso · superficie minima'}
@@ -2959,7 +3002,8 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
     el('heavyReviewTitle').textContent=heavy?'Colli pesanti sui piani superiori':'Scegli la disposizione';
     el('heavyReviewHelp').textContent=heavy
         ? 'Confronta le disposizioni e verifica che i colli di appoggio possano sostenere il peso.'
-        : byVolume?'Confronta volume e superficie delle alternative.':'La proposta con meno pedane rientra nel 5% di superficie in più rispetto alla superficie minima.';
+        : plans.some(plan=>plan.some(isTallNarrowPallet))?'Confronta volume, superficie e proporzioni delle pedane.':
+        byVolume?'Confronta volume e superficie delle alternative.':'La proposta con meno pedane rientra nel 5% di superficie in più rispetto alla superficie minima.';
     const confirm=el('reviewConfirm');
     const select=el('reviewPallet');
     let choice=0;
@@ -2991,6 +3035,10 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
             ['Limite altezza',height+' cm'],
             ['Peso lordo',formatShipmentWeight(full)]
         ];
+        const baselineVolume=shipmentVolume([...fixed,...compact.minimum]);
+        const volumeDelta=shipmentVolume(full)/baselineVolume-1;
+        if(Math.abs(volumeDelta)>1e-8)values.push(['Differenza di volume',
+            (volumeDelta>0?'+':'')+volumeDelta.toLocaleString(locale,{style:'percent',maximumFractionDigits:1})]);
         if(currentDivisor())values.push(['Peso volumetrico',formatVolumetricWeight(full)]);
         for(const [key,value] of values){
             const term=document.createElement('dt'),data=document.createElement('dd');
@@ -3005,6 +3053,14 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
         if(!hasHeavyUpperBoxes(plan)&&options.some(o=>hasHeavyUpperBoxes(o.plan)&&
             totalPalletArea(o.plan)===totalPalletArea(plan)&&tallestPallet(o.plan)===tallestPallet(plan)&&
             o.plan.length===plan.length))reasons.push('Colli pesanti in basso a parità di ingombro e altezza.');
+        const flagged=full.flatMap((p,index)=>isTallNarrowPallet(p)?[[p,index]]:[]);
+        for(const [p,index] of flagged){
+            const line=document.createElement('span');
+            line.textContent=translateApp('Pedana alta e stretta')+' · '+(index+1)+' · '+p.l+' × '+p.p+' cm · H '+p.height+' cm';
+            line.style.fontWeight='700';
+            reason.append(line);
+        }
+        if(flagged.length)reasons.push('Pedana alta e stretta. Verifica la stabilità e il fissaggio prima del trasporto.');
         for(const value of reasons){
             const line=document.createElement('span');
             line.textContent=value;
@@ -3238,6 +3294,22 @@ function renderViewer(){
     el('shipmentVolume').textContent=pallets.length
         ? formatVolume(shipmentVolume(pallets)) : '—';
     const p=pallets[active];
+    const warning=el('palletStabilityWarning');
+    const center=el('palletCargoCenter');
+    warning.hidden=!p||!isTallNarrowPallet(p);
+    warning.textContent=warning.hidden?'':'Pedana alta e stretta. Verifica la stabilità e il fissaggio prima del trasporto.';
+    center.hidden=warning.hidden;
+    center.replaceChildren();
+    if(!center.hidden){
+        const position=cargoCenter(p);
+        if(position){
+            const [x,y,z]=position;
+            const label=document.createElement('span');
+            label.textContent='Baricentro stimato dei colli';
+            const cm=value=>Math.round(value)+' cm';
+            center.append(label,' · H '+cm(base+z)+' · ΔX '+cm(x-p.l/2)+' · ΔY '+cm(y-p.p/2));
+        }else center.hidden=true;
+    }
     el('sample').hidden=Boolean(p)||flat||showEmptyViewer;
     el('emptyViewer').hidden=!showEmptyViewer;
     canvas.hidden=showEmptyViewer||!(p||flat);
@@ -4729,7 +4801,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
