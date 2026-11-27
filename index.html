@@ -440,6 +440,23 @@ body.pin-locked > :not(#startupPin){visibility:hidden!important}
 </style><script>let appLanguage='it';
 try{if(localStorage.getItem('po_language')==='en')appLanguage='en';}catch{}
 const englishLabels={
+    "Massimo tre scatole consecutive sul lato corto nella stessa colonna.":"Maximum of three consecutive cartons on their short face in the same column.",
+"Destinatario della merce":"Consignee",
+"Destinazione della merce":"Delivery destination",
+"Numero DDT":"Delivery note number",
+"Numero fattura":"Invoice number",
+"Impiegato dell’ufficio commerciale":"Prepared by (sales office)",
+"Invia report al magazzino":"Email warehouse report",
+"Invia report al corriere":"Email carrier report",
+"Dati per il corriere":"Carrier report details",
+"Prepara invio":"Prepare email",
+"Minor numero di pedane":"Fewest pallets",
+
+"Richiedi l’approvazione del magazzino per questa configurazione.":"Ask the warehouse to approve this configuration.",
+"Nome del magazziniere che ha approvato la configurazione":"Name of the warehouse worker who approved this configuration",
+"Approvazione del magazzino da richiedere":"Warehouse approval required",
+"Configurazione approvata in magazzino da":"Configuration approved in the warehouse by",
+
 "Pedane meno slanciate":"Less slender pallets",
 "Pedana alta e stretta. Verifica la stabilità e il fissaggio prima del trasporto.":"Tall, narrow pallet. Check stability and securing before transport.",
 "Confronta volume, superficie e proporzioni delle pedane.":"Compare volume, floor area and pallet proportions.",
@@ -817,8 +834,13 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 #heavyReviewChoices dd{margin:0;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
 .review-reason{display:grid;gap:4px;font-size:.82em}
 #lockPallet[aria-pressed="true"]{outline:2px solid #ffba09}
-</style><style>#palletStabilityWarning,#palletCargoCenter{margin:8px 12px}#palletStabilityWarning{font-weight:700;border-inline-start:3px solid #ffba09;padding-inline-start:8px}</style></head><body class="pin-locked">
-<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa report</button><button type="button" onclick="emailShipmentReport()">Invia report via email</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav><div class="app-language" role="group" aria-label="Lingua / Language"><button type="button" data-app-language="it" aria-pressed="true">IT</button><button type="button" data-app-language="en" aria-pressed="false">EN</button></div></header>
+</style><style>#palletStabilityWarning,#palletCargoCenter{margin:8px 12px}#palletStabilityWarning{font-weight:700;border-inline-start:3px solid #ffba09;padding-inline-start:8px}</style><style>
+#warehouseApproval{margin:12px;padding:12px;border:1px solid #ffba09;border-radius:10px}
+.warehouse-approval-warning{display:block;font-weight:750;border-inline-start:4px solid #ffba09;padding:6px 10px}
+#warehouseApproval label,#warehouseApprover{display:block;width:100%}
+#warehouseApprover{margin-top:6px;padding:8px;border-radius:6px;background:#fff;color:#142036}
+</style></head><body class="pin-locked">
+<header class="top"><div class="brand"><svg width="52" height="52" viewBox="0 0 48 48" aria-hidden="true"><path fill="#ffba09" d="M24 1 46 12 24 23 2 12Zm-22 15 20 10v21L2 36Zm44 0v20L26 47V26Z"/><path fill="#121a27" d="m10 20 5 2v16l-5-3Z"/></svg><div><h1>PalletOptimizer <b>PRO</b></h1><p>Pallettizzazione intelligente &amp; bilanciamento carichi</p></div></div><nav><button class="gold" onclick="downloadApp()">↗ Condividi App</button><button onclick="printOrder()">▤ Stampa report</button><button type="button" onclick="emailShipmentReport()">Invia report al magazzino</button><button type="button" onclick="openCarrierReport()">Invia report al corriere</button><label class="theme-choice" for="themeChoice">Grafica<select id="themeChoice"><option value="relief">In rilievo</option><option value="previous">Classica</option></select></label></nav><div class="app-language" role="group" aria-label="Lingua / Language"><button type="button" data-app-language="it" aria-pressed="true">IT</button><button type="button" data-app-language="en" aria-pressed="false">EN</button></div></header>
 <main class="dashboard">
 <section class="commessa panel"><div><h2>▤ &nbsp; Dati Commessa</h2><p>Intestazione Spedizione</p></div><label>Cliente<input id="orderClient" autocomplete="off" placeholder="Inserisci ragione sociale o cliente..."></label><label>Ordine<input id="orderNumber" autocomplete="off" placeholder="Es. ORD-2026-014B"></label></section>
 <div class="controls">
@@ -861,6 +883,11 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <div id="viewSwitch" class="view-switch"><button class="gold" id="view3" aria-pressed="true">3D</button><button id="view2" aria-pressed="false">2D</button></div>
 <canvas id="palletCanvas" width="900" height="600" hidden aria-label="Schema della pedana"></canvas>
 <div id="viewerLayers" hidden><label for="viewerLayer">Piano della pedana</label><select id="viewerLayer"></select><ul id="viewerLayerItems" aria-live="polite"></ul></div>
+<div id="warehouseApproval" hidden>
+<p class="warehouse-approval-warning">Richiedi l’approvazione del magazzino per questa configurazione.</p>
+<label for="warehouseApprover">Nome del magazziniere che ha approvato la configurazione</label>
+<input id="warehouseApprover" type="text" maxlength="120" autocomplete="off">
+</div>
 <p id="palletStabilityWarning" role="status" hidden></p><p id="palletCargoCenter" hidden></p><div id="articleLegend" hidden aria-label="Legenda colori degli articoli"></div><p id="emptyViewer" hidden>Nessuna pedana da visualizzare</p><div id="viewFooter"><button id="prevPallet" aria-label="Pedana precedente" disabled>‹</button><strong id="palletPosition">Pallet dimostrativo</strong><button id="nextPallet" aria-label="Pedana successiva" disabled>›</button><span id="palletVolume" hidden></span><button id="showDetails" disabled>Visualizza dettagli pedana</button><button type="button" id="lockPallet" hidden aria-pressed="false">Blocca pedana</button><button type="button" id="recalculateUnlocked" hidden>Ricalcola pedane libere</button><button id="editPallet" disabled>Modifica disposizione manualmente</button></div>
 </section>
 <section class="panel padded metrics"><h3>📊 &nbsp; Risultati</h3><p id="status">In attesa del calcolo</p><p id="optimizationReason" hidden></p><div class="stats"><div><strong id="volume">—</strong>Utilizzo volume</div><div><strong id="boxes">—</strong>Scatole</div><div><strong id="layers">—</strong>Strati</div></div><p class="shipment-volume">Volume finale <strong id="shipmentVolume">—</strong></p></section>
@@ -909,6 +936,10 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <section id="assemblyReview" hidden aria-label="Verifica disposizione"><div><h3>Verifica della pedana</h3><ul id="assemblyWarnings"></ul>
 <div class="assembly-tools"><button type="button" id="assemblyConfirm">Conferma la disposizione</button><button type="button" id="assemblyRestart">Riposiziona carico</button></div></div></section>
 </dialog>
+<dialog id="carrierReportDialog" class="project-dialog" aria-labelledby="carrierReportTitle">
+<form id="carrierReportForm"><h2 id="carrierReportTitle">Dati per il corriere</h2><label>Destinatario della merce<input name="recipient" required maxlength="120"></label><label>Destinazione della merce<input name="destination" required maxlength="120"></label><label>Numero DDT<input name="ddt" required maxlength="120"></label><label>Numero fattura<input name="invoice" required maxlength="120"></label><label>Impiegato dell’ufficio commerciale<input name="preparedBy" required maxlength="120"></label>
+<button type="button" id="cancelCarrierReport">Annulla</button><button type="submit">Prepara invio</button>
+</form></dialog>
 <dialog id="reportEmailFallback" class="project-dialog" aria-labelledby="reportEmailTitle">
 <form method="dialog"><button aria-label="Chiudi">✕</button></form>
 <h2 id="reportEmailTitle">File pronto</h2>
@@ -923,6 +954,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <button id="reviewCompact" type="button" aria-pressed="true"></button>
 <button id="reviewCompactFewer" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLowerFewer" type="button" aria-pressed="false" hidden></button>
+<button id="reviewFewest" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLessSlender" type="button" aria-pressed="false" hidden></button>
 <button id="reviewShorter" type="button" aria-pressed="false" hidden></button>
 <button id="reviewLower" type="button" aria-pressed="false"></button>
@@ -1583,7 +1615,7 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
             if(occupied.some(box=>overlapArea(spot,box)>0)) return false;
             if(p.boxes.some(box=>box.z<z&&boxFormat(box)===boxFormat(b)&&
                 box.weight<b.weight&&overlapArea(spot,box)>0))return false;
-            return canUseLayer(p,b,z) && joinsLoad({...spot,h:b.h},occupied);
+            return !exceedsShortSideColumn({...spot,smallFace:b.smallFace},p.boxes) && canUseLayer(p,b,z) && joinsLoad({...spot,h:b.h},occupied);
         };
         if (p.columns.length) {
             for (const box of supports) {
@@ -1629,6 +1661,17 @@ function upperPosition(p,b,height,preferHigher=false,target=null,compact=false){
         if(best)return best;
     }
     return null;
+}
+const shortSideColumnLimit=3;
+function exceedsShortSideColumn(box,boxes,remaining=shortSideColumnLimit){
+    if(!box.smallFace)return false;
+    if(remaining===0)return true;
+    return boxes.some(support=>support.smallFace&&
+        Math.abs(support.z+support.h-box.z)<1e-8&&overlapArea(support,box)>1e-8&&
+        exceedsShortSideColumn(support,boxes,remaining-1));
+}
+function invalidShortSideStack(boxes){
+    return boxes.some(box=>exceedsShortSideColumn(box,boxes));
 }
 function canRotateOnSide(box){
     return box.weight<8 && Math.min(box.l,box.p,box.h)<30;
@@ -1861,7 +1904,7 @@ function gridLayout(dim,items,l,p,cols,rows,layers,maxWeight){
 }
 function uniformGridCandidates(dim,items,height){
     const box=items[0];
-    const layers=Math.floor((height-base)/box.h+1e-9);
+    const layers=Math.min(box.smallFace?shortSideColumnLimit:Infinity,Math.floor((height-base)/box.h+1e-9));
     const orientations=box.l===box.p?[[box.l,box.p]]:[[box.l,box.p],[box.p,box.l]];
     return orientations.flatMap(([l,p])=>{
         const cols=Math.floor(dim[0]/l+1e-9), rows=Math.floor(dim[1]/p+1e-9);
@@ -1906,6 +1949,7 @@ function mixedOrientationCandidates(dim,items,height){
                             const levels=levelsByKind.get(item.kind);
                             if(pallet.weight+item.weight<=weightLimit){
                                 for(const column of columns){
+                                    if(column.smallFace&&column.z>=shortSideColumnLimit*column.h)continue;
                                     if(base+column.z+column.h>height||(levels.size>=item.maxLayers&&!levels.has(column.z)))continue;
                                     if(!best||column.z+column.h<best.z+best.h||
                                         (column.z+column.h===best.z+best.h&&column.z<best.z))best=column;
@@ -2460,7 +2504,7 @@ function palletSlenderness(pallet){
 }
 function isTallNarrowPallet(pallet){
     // A geometric screening flag, not a transport or securing limit.
-    return palletSlenderness(pallet)>=2.5;
+    return palletSlenderness(pallet)>=2;
 }
 function cargoCenter(pallet){
     const weight=pallet.boxes.reduce((sum,box)=>sum+box.weight,0);
@@ -2497,7 +2541,7 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
     if((automatic&&compact.minimum.length>1)||byVolume){
         const global=searchShipmentLayouts(items,dims,height,compact,false,compareBase,byVolume,
             fraction=>report(45+25*fraction,'Ricerca delle disposizioni per la spedizione…'));
-        compact=rankShipmentChoices([compact.minimum,compact.fewer,compact.alternate,...global].filter(Boolean),compare,byVolume);
+        compact=rankShipmentChoices([compact.minimum,compact.fewer,compact.alternate,compact.fewest,...global].filter(Boolean),compare,byVolume);
         heavy=hasHeavyUpperBoxes(compact.minimum)||Boolean(compact.fewer&&hasHeavyUpperBoxes(compact.fewer));
     }
     report(70,'Verifica della distribuzione dei pesi…');
@@ -2528,6 +2572,14 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
         const better=alternatives.filter(plan=>plan&&maxRatio(plan)<ratio-1e-8);
         better.sort((a,b)=>maxRatio(a)-maxRatio(b)||a.length-b.length||compare(a,b));
         if(better.length&&!alreadyShown.includes(better[0]))compact.lessSlender=better[0];
+    }
+    if(compact.minimum.length>1){
+        for(const dim of dims)if(!singleFormatPlans.has(dim))findPlan([dim]);
+        const alternatives=[compact.fewer,compact.alternate,compact.lessSlender,shorter,
+            lower?.minimum,lower?.fewer,lower?.alternate,compact.fewest,...singleFormatPlans.values()];
+        const fewer=alternatives.filter(plan=>plan&&plan.length<compact.minimum.length);
+        fewer.sort((a,b)=>a.length-b.length||compare(a,b));
+        if(fewer.length)compact.fewest=fewer[0];
     }
     return {compact,shorter,lower,heavy};
 }
@@ -2597,16 +2649,17 @@ function rankShipmentChoices(candidates,compare=comparePalletSurface,byVolume=fa
     candidates.sort(compare);
     const minimum=candidates[0];
     if(!minimum)return {minimum};
+    const fewest=candidates.reduce((best,plan)=>plan.length<best.length?plan:best,minimum);
     if(byVolume){
         const surface=[...candidates].sort(comparePalletSurface)[0];
-        return {minimum,alternate:totalPalletArea(surface)<totalPalletArea(minimum)?surface:undefined};
+        return {minimum,fewest:fewest===minimum?undefined:fewest,alternate:totalPalletArea(surface)<totalPalletArea(minimum)?surface:undefined};
     }
     const area=totalPalletArea(minimum);
     const projectArea=area+totalPalletArea(composedPallets);
     const comparable=candidates.filter(plan=>plan.length<minimum.length&&
         totalPalletArea(plan)-area<=projectArea*palletAreaTolerance+1e-8);
     comparable.sort((a,b)=>a.length-b.length||compare(a,b));
-    return {minimum,fewer:comparable[0]};
+    return {minimum,fewest:fewest===minimum?undefined:fewest,fewer:comparable[0]};
 }
 function shipmentWeightSpread(plan){
     return Math.max(...plan.map(p=>p.weight))-Math.min(...plan.map(p=>p.weight));
@@ -2939,7 +2992,7 @@ function calculateOrder(selected=0){
             }
             try{
                 const {compact,shorter,lower,heavy}=data.result;
-                if(heavy||compact.fewer||compact.alternate||compact.lessSlender||[...fixed,...compact.minimum].some(isTallNarrowPallet)){
+                if(heavy||compact.fewest||compact.fewer||compact.alternate||compact.lessSlender||[...fixed,...compact.minimum].some(isTallNarrowPallet)){
                     const args=[compact,shorter,lower,heavy,height,selected,byVolume];
                     optimizationAlternatives={snapshot,args,choice:0};
                     reviewAlternatives.hidden=false;
@@ -2972,15 +3025,21 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
     const dialog=el('heavyReviewDialog');
     const fixed=fixedOptimizationPallets();
     const options=[
-        {plan:compact.fewer,reference:compact.minimum,button:el('reviewCompactFewer'),label:'Consigliata · meno pedane'},
         {plan:compact.minimum,button:el('reviewCompact'),label:byVolume?'Volume minimo':'Superficie minima'},
+        {plan:compact.fewer,reference:compact.minimum,button:el('reviewCompactFewer'),label:'Consigliata · meno pedane'},
         {plan:compact.lessSlender,button:el('reviewLessSlender'),label:'Pedane meno slanciate'},
         {plan:shorter||compact.alternate,button:el('reviewShorter'),label:shorter?'Altezza ridotta':'Superficie minima'},
         {plan:lower?.fewer,reference:lower?.minimum,button:el('reviewLowerFewer'),label:'Colli pesanti in basso · consigliata'},
         {plan:lower?.minimum,button:el('reviewLower'),label:byVolume?'Colli pesanti in basso · volume minimo':'Colli pesanti in basso · superficie minima'}
-    ].filter(option=>{
-        option.button.hidden=!option.plan;
-        return option.plan;
+        ,
+        {plan:compact.fewest,button:el('reviewFewest'),label:'Minor numero di pedane'},
+    ].filter((option,index,list)=>{
+        const key=option.plan&&warehouseLayoutKey(option.plan);
+        const previous=key&&list.slice(0,index).find(item=>item.plan&&warehouseLayoutKey(item.plan)===key);
+        if(previous&&option.plan===compact.fewest&&!previous.fewest)previous.fewest=true;
+        if(option.plan===compact.fewest&&option.plan)option.fewest=true;
+        option.button.hidden=!option.plan||Boolean(previous);
+        return !option.button.hidden;
     });
     const plans=options.map(({plan})=>{
         for(const pallet of plan)pallet.maxHeight=height;
@@ -3022,11 +3081,11 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
     }
     const locale=appLanguage==='en'?'en-GB':'it-IT';
     const number=value=>value.toLocaleString(locale,{maximumFractionDigits:4});
-    options.forEach(({button,label,reference,plan},i)=>{
+    options.forEach(({button,label,reference,plan,fewest},i)=>{
         const full=plans[i];
         const title=document.createElement('strong');
         const metrics=document.createElement('dl');
-        title.textContent=label;
+        title.textContent=fewest&&label!=='Minor numero di pedane'?translateApp(label)+' · '+translateApp('Minor numero di pedane'):label;
         const values=[
             ['Pedane',full.length],
             ['Superficie',number(totalPalletArea(full)/10000)+' m²'],
@@ -3059,6 +3118,12 @@ function openShipmentReview(compact,shorter,lower,heavy,height,selected,byVolume
             line.textContent=translateApp('Pedana alta e stretta')+' · '+(index+1)+' · '+p.l+' × '+p.p+' cm · H '+p.height+' cm';
             line.style.fontWeight='700';
             reason.append(line);
+        }
+        if(flagged.length){
+            const approval=document.createElement('strong');
+            approval.textContent='Richiedi l’approvazione del magazzino per questa configurazione.';
+            approval.className='warehouse-approval-warning';
+            reason.append(approval);
         }
         if(flagged.length)reasons.push('Pedana alta e stretta. Verifica la stabilità e il fissaggio prima del trasporto.');
         for(const value of reasons){
@@ -3289,7 +3354,28 @@ function renderShipmentWeights(project){
         return row;
     }));
 }
+let approvedLayout=null;
+function warehouseLayoutKey(project){
+    return JSON.stringify(project.map(p=>[p.l,p.p,p.height,p.boxes.map(b=>[
+        b.id,b.x,b.y,b.z,b.l,b.p,b.h,b.weight
+    ])]));
+}
+function warehouseApproverName(){
+    if(!pallets.some(isTallNarrowPallet)||approvedLayout!==warehouseLayoutKey(pallets))return '';
+    return el('warehouseApprover').value.trim();
+}
+el('warehouseApprover').oninput=()=>{
+    approvedLayout=warehouseLayoutKey(pallets);
+};
+function renderWarehouseApproval(){
+    el('warehouseApproval').hidden=!pallets.some(isTallNarrowPallet);
+    if(approvedLayout!==null&&(el('warehouseApproval').hidden||approvedLayout!==warehouseLayoutKey(pallets))){
+        approvedLayout=null;
+        el('warehouseApprover').value='';
+    }
+}
 function renderViewer(){
+    renderWarehouseApproval();
     renderShipmentWeights(pallets);
     el('shipmentVolume').textContent=pallets.length
         ? formatVolume(shipmentVolume(pallets)) : '—';
@@ -3403,6 +3489,7 @@ function manualPositionError(pallet,original,position){
 }
 function manualLayoutError(pallet){return manualLayoutIssues(pallet)[0]||'';}
 function manualLayoutIssues(pallet, all=false){
+    if(invalidShortSideStack(pallet.boxes))return ['Massimo tre scatole consecutive sul lato corto nella stessa colonna.'];
     const issues=new Set();
     const {boxes}=pallet, eps=1e-8;
     for(const [index,box] of boxes.entries()){
@@ -3545,6 +3632,8 @@ function drawManual(){
 function commitManual(position){
     const p=manualDraft, error=manualPositionError(p,p.boxes[manualIndex],position);
     if(error){manualNote(error,true);return false;}
+    const trial=p.boxes.map((box,i)=>i===manualIndex?{...box,...position}:box);
+    if(invalidShortSideStack(trial)){manualNote('Massimo tre scatole consecutive sul lato corto nella stessa colonna.',true);return false;}
     Object.assign(p.boxes[manualIndex],position);
     pendingOrientation=null;
     p.height=base+Math.max(...p.boxes.map(b=>b.z+b.h));
@@ -3961,6 +4050,14 @@ function dropAssembly(box){
         paintAssembly();
         return;
     }
+    if(region==='deck'){
+        const trial=assembly.boxes.filter((_,i)=>!assemblyPick.placed||old!=='deck'||i!==index);
+        if(invalidShortSideStack([...trial,placed])){
+            assemblyMessage('Massimo tre scatole consecutive sul lato corto nella stessa colonna.');
+            paintAssembly();
+            return;
+        }
+    }
     const target=region==='floor'?assembly.floorBoxes:assembly.boxes;
     if(assemblyPick.placed&&old===region)target[index]=placed;
     else {
@@ -4097,6 +4194,7 @@ el('assemblyAdd').onclick=()=>{
 el('assemblyRestart').onclick=()=>{resetAssembly();el('assemblyFormat').focus();};
 el('assemblyConfirm').onclick=()=>{
     if(el('assemblyReview').hidden||!assembly?.boxes.length)return;
+    if(invalidShortSideStack(assembly.boxes)){appAlert('Massimo tre scatole consecutive sul lato corto nella stessa colonna.');return;}
     const {l,p,height,weight,volume,maxHeight,boxes}=assembly;
     const hadAutomatic=pallets.length>composedPallets.length;
     composedPallets.push({l,p,height,weight,volume,maxHeight,boxes});
@@ -4112,7 +4210,7 @@ composeDialog.addEventListener('cancel',resetAssembly);
 function projectSnapshot(){
     const snapshotPallet=p=>({l:p.l,p:p.p,maxHeight:p.maxHeight,boxes:p.boxes});
     return {type:'PalletOptimizerProject',version:1,
-        client:el('orderClient').value,order:el('orderNumber').value,
+        client:el('orderClient').value,order:el('orderNumber').value,warehouseApprover:warehouseApproverName(),
         transport,airHeight,truckHeight,mode,tariffCriterion:el('tariffCriterion').value,airDivisor:el('airDivisor').value,truckDivisor:el('truckDivisor').value,balanceWeight:el('balanceWeight').checked,formats:[...manual],manifest,
         pallets:pallets.map(p=>({...snapshotPallet(p),manual:composedPallets.includes(p)})),
         draft:assembly?{...snapshotPallet(assembly),floorBoxes:assembly.floorBoxes,level:Number(el('assemblyZ').value),autoLevel:el('assemblyAutoZ').checked}:null};
@@ -4354,6 +4452,10 @@ function parseProject(data){
     return {...data,manifest:items,pallets:restored,manualPallets:restored.filter((_,i)=>data.pallets[i].manual),draft};
 }
 function setProject(project){
+    const approver=typeof project.warehouseApprover==='string'?project.warehouseApprover.trim().slice(0,120):'';
+    const restoreApproval=approver&&project.pallets.some(isTallNarrowPallet);
+    approvedLayout=restoreApproval?warehouseLayoutKey(project.pallets):null;
+    el('warehouseApprover').value=restoreApproval?approver:'';
     lockedPallets.clear();
     clearOptimizationAlternatives();
     manifest=project.manifest;
@@ -4657,6 +4759,11 @@ function shipmentPdf(pages){
     write('trailer\n<< /Size '+offsets.length+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
     return new Blob(chunks,{type:'application/pdf'});
 }
+function warehouseApprovalReport(){
+    if(!pallets.some(isTallNarrowPallet))return '';
+    const name=warehouseApproverName();
+    return name?translateApp('Configurazione approvata in magazzino da')+': '+name:translateApp('Approvazione del magazzino da richiedere');
+}
 function shipmentReportTotals(){
     return [
         pallets.length+' pallet · Superficie '+(totalPalletArea(pallets)/10000).toLocaleString(document.documentElement.lang==='en'?'en-GB':'it-IT',{maximumFractionDigits:4})+' m²',
@@ -4671,10 +4778,11 @@ function reportPalletImage(pallet){
     draw(picture,pallet,flat);
     return picture;
 }
-function renderShipmentPdf(){
+function renderShipmentPdf(carrierDetails=null){
     const pages=[];
     const customer=el('orderClient').value||'—',order=el('orderNumber').value||'—';
     const totals=shipmentReportTotals();
+    const approval=warehouseApprovalReport();
     for(const [index,pallet] of pallets.entries()){
         let ctx,y;
         function newPage(continued=false){
@@ -4705,11 +4813,16 @@ function renderShipmentPdf(){
         newPage();
         line('Cliente: '+customer);
         line('Ordine: '+order);
+        if(carrierDetails){
+            for(const [label,value] of carrierDetails)line(translateApp(label)+': '+value,false,false);
+        }
         for(const total of totals)line(total);
+        if(approval)line(approval,true,false);
         line(pallet.l+' × '+pallet.p+' cm · Altezza '+pallet.height+' cm · '+palletWeightFormat.format(pallet.weight)+' kg lordi (tara '+tare+' kg)');
         line('Volume pedana '+formatVolume(palletVolume(pallet)));
         ctx.drawImage(reportPalletImage(pallet),208,y+20,584,344);
         y+=375;
+        if(carrierDetails)continue;
         for(const [layer,[z,boxes]] of layersOf(pallet).entries()){
             const heading='Piano '+(layer+1)+' · '+(base+z)+' cm · '+boxes.length+' colli · '+
                 palletWeightFormat.format(boxes.reduce((sum,b)=>sum+b.weight,0))+' kg';
@@ -4751,6 +4864,30 @@ async function emailAttachment(createFile,title,message){
         el('reportEmailFallback').showModal();
     }catch(error){appAlert('Impossibile preparare il file da inviare. '+error.message);}
 }
+const carrierReportForm=el('carrierReportForm');
+const carrierReportDialog=el('carrierReportDialog');
+const carrierFields={"recipient": "Destinatario della merce", "destination": "Destinazione della merce", "ddt": "Numero DDT", "invoice": "Numero fattura", "preparedBy": "Impiegato dell’ufficio commerciale"};
+function openCarrierReport(){
+    if(!pallets.length){appAlert('Calcola le pedane prima di inviare il report.');return;}
+    carrierReportForm.reset();
+    carrierReportDialog.showModal();
+}
+el('cancelCarrierReport').onclick=()=>carrierReportDialog.close();
+carrierReportForm.addEventListener('input',event=>event.target.setCustomValidity(''));
+carrierReportForm.onsubmit=event=>{
+    event.preventDefault();
+    const details=[];
+    for(const [key,label] of Object.entries(carrierFields)){
+        const input=carrierReportForm.elements.namedItem(key);
+        const value=input.value.trim();
+        if(!value){input.value='';input.reportValidity();return;}
+        details.push([label,value]);
+    }
+    carrierReportDialog.close();
+    return emailAttachment(()=>new File([renderShipmentPdf(details)],'Report-corriere.pdf',{type:'application/pdf'}),
+        appLanguage==='en'?'Carrier shipment report':'Report spedizione per il corriere',
+        appLanguage==='en'?'Please find the shipment report attached.':'Ciao,\nin allegato il report della spedizione.');
+};
 function emailShipmentReport(){
     if(!pallets.length){appAlert('Calcola le pedane prima di inviare il report.');return;}
     const order=el('orderNumber').value.trim();
@@ -4764,9 +4901,10 @@ async function printOrder(){
     if(!pallets.length){appAlert('Calcola le pedane prima di stampare.');return;}
     const root=el('printReportRoot');
     const customer=escapeText(el('orderClient').value||'—'),order=escapeText(el('orderNumber').value||'—');
+    const approval=warehouseApprovalReport();
     root.innerHTML=pallets.map((p,i)=>{
         const picture=reportPalletImage(p);
-        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> <span data-user-text>'+customer+'</span></p><p><strong>Ordine</strong> <span data-user-text>'+order+'</span></p>'+shipmentReportTotals().map(value=>'<p>'+escapeText(value)+'</p>').join('')+'</header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
+        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> <span data-user-text>'+customer+'</span></p><p><strong>Ordine</strong> <span data-user-text>'+order+'</span></p>'+shipmentReportTotals().map(value=>'<p>'+escapeText(value)+'</p>').join('')+(approval?'<p data-user-text><strong>'+escapeText(approval)+'</strong></p>':'')+'</header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
     }).join('');
     await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
     root.classList.add('measuring');
@@ -4801,7 +4939,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
