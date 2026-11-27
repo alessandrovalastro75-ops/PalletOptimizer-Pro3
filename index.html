@@ -52,6 +52,10 @@ h2{color:var(--gold);font-size:clamp(17px,1.9vw,28px);line-height:1.15}h2 i{font
 .print-sheet header{display:block;position:static;padding:0;margin:0 0 2mm;background:none;color:inherit;border:0;box-shadow:none}
 .print-sheet h1{font-size:14pt;margin:0 0 1mm}
 .print-sheet p{margin:0 0 1mm}
+.print-totals{margin-top:4mm;padding:3mm;border:1px solid #8395a9}
+.print-totals h2{font-size:16pt;margin:0 0 2mm}
+.print-totals dl{display:grid;grid-template-columns:1fr auto;gap:1mm 4mm;margin:0;font-size:13pt}
+.print-totals dd{margin:0;text-align:right;font-weight:700}
 .print-pallet-body{display:grid;grid-template-columns:52mm minmax(0,1fr);align-items:start;gap:3mm}
 .print-sheet img{display:block;width:100%;height:34mm;object-fit:contain}
 .print-sheet table{font-size:9pt;overflow-wrap:anywhere}
@@ -445,7 +449,14 @@ const englishLabels={
 "Destinazione della merce":"Delivery destination",
 "Numero DDT":"Delivery note number",
 "Numero fattura":"Invoice number",
-"Impiegato dell’ufficio commerciale":"Prepared by (sales office)",
+"Operatore commerciale LED":"LED sales representative",
+"Totali spedizione":"Shipment totals",
+"Pedane totali":"Total pallets",
+"Colli totali":"Total cartons",
+"Peso lordo totale":"Total gross weight",
+"Peso volumetrico totale":"Total volumetric weight",
+"Volume complessivo":"Total volume",
+"Superficie totale a terra":"Total floor area",
 "Invia report al magazzino":"Email warehouse report",
 "Invia report al corriere":"Email carrier report",
 "Dati per il corriere":"Carrier report details",
@@ -937,7 +948,7 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
 <div class="assembly-tools"><button type="button" id="assemblyConfirm">Conferma la disposizione</button><button type="button" id="assemblyRestart">Riposiziona carico</button></div></div></section>
 </dialog>
 <dialog id="carrierReportDialog" class="project-dialog" aria-labelledby="carrierReportTitle">
-<form id="carrierReportForm"><h2 id="carrierReportTitle">Dati per il corriere</h2><label>Destinatario della merce<input name="recipient" required maxlength="120"></label><label>Destinazione della merce<input name="destination" required maxlength="120"></label><label>Numero DDT<input name="ddt" required maxlength="120"></label><label>Numero fattura<input name="invoice" required maxlength="120"></label><label>Impiegato dell’ufficio commerciale<input name="preparedBy" required maxlength="120"></label>
+<form id="carrierReportForm"><h2 id="carrierReportTitle">Dati per il corriere</h2><label>Destinazione della merce<input name="destination" required maxlength="120"></label><label>Numero DDT<input name="ddt" required maxlength="120"></label><label>Numero fattura<input name="invoice" required maxlength="120"></label><label>Operatore commerciale LED<input name="preparedBy" required maxlength="120"></label>
 <button type="button" id="cancelCarrierReport">Annulla</button><button type="submit">Prepara invio</button>
 </form></dialog>
 <dialog id="reportEmailFallback" class="project-dialog" aria-labelledby="reportEmailTitle">
@@ -1510,6 +1521,12 @@ const appPrompt=(message,value)=>window.prompt(translateApp(message),value);
     </script>
 <script id="shipmentEngine">
 const tare=22, base=10, weightLimit=750;
+function warehouseLayoutKey(project){
+    return JSON.stringify(project.map(p=>[p.l,p.p,p.height,p.boxes.map(b=>[
+        b.id,b.x,b.y,b.z,b.l,b.p,b.h,b.weight
+    ])]));
+}
+
 function fits(box,l,p){return (box.l<=l&&box.p<=p)||(box.p<=l&&box.l<=p);}
 function emptyPallet(dim){
     const [l,p]=dim;
@@ -1838,9 +1855,46 @@ function completeFlatBaseWithUpperGrid(pallet,baseWidth,baseDepth,upper,remainin
                 trial.height=base+z+box.h;
                 return true;
             });
-            if(complete&&remaining.every(box=>put(trial,box,height,weightLimit,Infinity))){
+            if(complete&&remaining.every(box=>placeBox(trial,box,height,weightLimit,Infinity))){
                 candidates.push({p:trial,remaining:[],uneven:unevenLayers(trial)});
             }
+        }
+    }
+    return candidates;
+}
+function steppedGridCandidates(dim,own,other,l,p,cols,rows,height){
+    const slots=cols*rows;
+    const accessory=other[0];
+    const step=own[0].h;
+    if(slots!==4||own.length!==2*slots+1||other.length!==1||
+        accessory.h>step||base+3*step>height||
+        accessory.l*accessory.p>=l*p||
+        tare+accessory.weight+own.reduce((sum,box)=>sum+box.weight,0)>weightLimit)return [];
+    const ordered=[...own].sort((a,b)=>b.weight-a.weight);
+    const grid=gridLayout(dim,ordered,l,p,cols,rows,1,weightLimit).p;
+    if(grid.boxes.length!==slots)return [];
+    const candidates=[];
+    // Leave one slot free on the middle tier and try neighboring top pairs.
+    for(const missing of grid.boxes.keys()){
+        const middle=grid.boxes.filter((_,index)=>index!==missing);
+        for(const open of middle.keys()){
+            const supports=middle.filter((_,index)=>index!==open);
+            if(!touchesSide(supports[0],supports[1]))continue;
+            const trial={...grid,boxes:[...grid.boxes],free:[],columns:[],flatBase:true};
+            const targets=[...middle,...supports];
+            if(!targets.every(({x,y},index)=>{
+                const box=ordered[slots+index];
+                const z=index<middle.length?step:2*step;
+                if(!canUseLayer(trial,box,z))return false;
+                trial.boxes.push({...box,x,y,z,l,p});
+                trial.weight+=box.weight;
+                trial.volume+=l*p*step;
+                return true;
+            }))continue;
+            trial.height=base+3*step;
+            if(!placeBox(trial,accessory,base+2*step+accessory.h,weightLimit,Infinity,false,true))continue;
+            if(Math.abs(trial.boxes.at(-1).z-2*step)>1e-8)continue;
+            candidates.push({p:trial,remaining:[],uneven:unevenLayers(trial)});
         }
     }
     return candidates;
@@ -1856,6 +1910,7 @@ function flatBaseCandidates(dim,items,groups,height){
             const cols=Math.floor(dim[0]/l+1e-9), rows=Math.floor(dim[1]/p+1e-9);
             const perLayer=cols*rows;
             if(perLayer<2||perLayer>own.length)continue;
+            result.push(...steppedGridCandidates(dim,own,others,l,p,cols,rows,height));
             const levels=new Set(others.filter(top=>fits(top,cols*l,rows*p)).map(top=>
                 Math.min(Math.floor(own.length/perLayer),Math.floor((height-base-top.h)/box.h+1e-9))));
             for(const layers of levels){
@@ -1867,7 +1922,12 @@ function flatBaseCandidates(dim,items,groups,height){
                 const {p:pallet,remaining}=layout;
                 pallet.flatBase=true;
                 pallet.free=[];
-                result.push(...completeFlatBaseWithUpperGrid(pallet,cols*l,rows*p,others,remaining,height));
+                for(const format of new Set(others.map(boxFormat))){
+                    const upper=others.filter(box=>boxFormat(box)===format);
+                    const accessories=others.filter(box=>boxFormat(box)!==format);
+                    result.push(...completeFlatBaseWithUpperGrid(
+                        pallet,cols*l,rows*p,upper,[...accessories,...remaining],height));
+                }
                 for(const p of [{...pallet,boxes:[...pallet.boxes],free:[]},pallet]){
                     const before=p.boxes.length;
                     const pending=p===pallet?others:placeUpperPinwheels(p,others,height);
@@ -2364,9 +2424,10 @@ function improveWrapFit(pallet,originals,height,allowFlatBase){
     let best=pallet;
     for(const {p,remaining} of palletCandidates([pallet.l,pallet.p],items,height,true,allowFlatBase)){
         if(remaining.length||p.boxes.length!==items.length||!p.boxes.some(box=>box.smallFace))continue;
+        if(p.height>best.height+1e-8||compareLayerShape([p],[best])>0)continue;
         const candidateClearance=lateralClearance(p);
         if(candidateClearance>clearance+1e-8||
-            (Math.abs(candidateClearance-clearance)<=1e-8&&(best===pallet||p.height>=best.height)))continue;
+            (Math.abs(candidateClearance-clearance)<=1e-8&&p.height>=best.height))continue;
         if(loadingInversions(p)>inversions+1e-8||stackedHeavyPairs(p)>stacked||
             heavyUpperBoxes(p).length>heavy)continue;
         best=p;
@@ -2431,12 +2492,18 @@ function firstUpperLayerFill(pallet){
     }
     return [...firstByKind.values()].reduce((sum,layer)=>sum+(layer.z>1e-8?layer.count:0),0);
 }
+function compareLayerShape(a,b){
+    const flatBases=plan=>plan.filter(p=>p.flatBase).length;
+    const upperFill=plan=>plan.reduce((sum,p)=>sum+firstUpperLayerFill(p),0);
+    return flatBases(b)-flatBases(a)||upperFill(b)-upperFill(a);
+}
 function compareShipments(a,b){
     const inversions=plan=>plan.reduce((sum,p)=>sum+loadingInversions(p),0);
     const volume=plan=>plan.reduce((sum,p)=>sum+p.l*p.p*p.height,0);
     const stacked=plan=>plan.reduce((sum,p)=>sum+stackedHeavyPairs(p),0);
-    return comparePalletSurface(a,b)||stacked(a)-stacked(b)||inversions(a)-inversions(b)||a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b)||
-        b.reduce((sum,p)=>sum+firstUpperLayerFill(p),0)-a.reduce((sum,p)=>sum+firstUpperLayerFill(p),0);
+    return comparePalletSurface(a,b)||stacked(a)-stacked(b)||inversions(a)-inversions(b)||
+        a.reduce((sum,p)=>sum+articleMix(p),0)-b.reduce((sum,p)=>sum+articleMix(p),0)||
+        baseLayerDeficit(a)-baseLayerDeficit(b)||volume(a)-volume(b)||compareLayerShape(a,b);
 }
 function articleMix(p){
     const formats=new Map();
@@ -2522,7 +2589,9 @@ function tallestPallet(plan){
 let composedPallets;
 function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,manualPallets},report){
     composedPallets=manualPallets;
-    const items=remaining.flatMap(box=>Array.from({length:box.qty},()=>({...box})));
+    // Use stable article identifiers for the search, independently of the displayed list.
+    const ordered=[...remaining].sort((a,b)=>compareKeys(a.id,b.id));
+    const items=ordered.flatMap((box,kind)=>Array.from({length:box.qty},()=>({...box,kind})));
     const initial=planOrder(items,dims,height,automatic);
     if(!initial)return null;
     report(20,'Confronto dei formati delle pedane…');
@@ -2534,7 +2603,8 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
         return plan;
     };
     const compareBase=byVolume?compareVolumeShipments:compareGlobalShipments;
-    const compare=(a,b)=>compareBase(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0);
+    const compare=(a,b)=>compareBase(a,b)||(balanced?shipmentWeightSpread(a)-shipmentWeightSpread(b):0)||
+        compareKeys(warehouseLayoutKey(a),warehouseLayoutKey(b));
     let compact=shipmentChoices(initial,items,dims,height,findPlan,heavy,false,compare,byVolume);
     report(45,'Ricerca delle disposizioni per la spedizione…');
     const initialCompact=compact;
@@ -2580,6 +2650,14 @@ function optimizeShipment({remaining,dims,height,balanced,automatic,byVolume,man
         const fewer=alternatives.filter(plan=>plan&&plan.length<compact.minimum.length);
         fewer.sort((a,b)=>a.length-b.length||compare(a,b));
         if(fewer.length)compact.fewest=fewer[0];
+    }
+    // Return the original indices expected by the viewer and manual editor.
+    const displayKinds=new Map(remaining.map(box=>[box.id,box.kind]));
+    const plans=[...Object.values(compact),shorter,...Object.values(lower??{})];
+    for(const plan of plans.filter(Array.isArray)){
+        for(const pallet of plan){
+            for(const box of pallet.boxes)box.kind=displayKinds.get(box.id);
+        }
     }
     return {compact,shorter,lower,heavy};
 }
@@ -2669,9 +2747,13 @@ function compareGlobalShipments(a,b){
         Number(hasHeavyUpperBoxes(a))-Number(hasHeavyUpperBoxes(b))||
         compareShipments(a,b);
 }
+function compareKeys(a,b){
+    return a<b?-1:a>b?1:0;
+}
 function compareVolumeShipments(a,b){
     return Math.round((shipmentVolume(a)-shipmentVolume(b))*1e6)||
-        a.length-b.length||compareGlobalShipments(a,b);
+        a.length-b.length||Number(hasHeavyUpperBoxes(a))-Number(hasHeavyUpperBoxes(b))||
+        compareLayerShape(a,b)||compareGlobalShipments(a,b);
 }
 // Explore complete shipments while retaining several ways to allocate the remaining cartons.
 function searchShipmentLayouts(items,dims,height,reference,keepHeavyLow,compare,byVolume,report){
@@ -3355,11 +3437,6 @@ function renderShipmentWeights(project){
     }));
 }
 let approvedLayout=null;
-function warehouseLayoutKey(project){
-    return JSON.stringify(project.map(p=>[p.l,p.p,p.height,p.boxes.map(b=>[
-        b.id,b.x,b.y,b.z,b.l,b.p,b.h,b.weight
-    ])]));
-}
 function warehouseApproverName(){
     if(!pallets.some(isTallNarrowPallet)||approvedLayout!==warehouseLayoutKey(pallets))return '';
     return el('warehouseApprover').value.trim();
@@ -4764,11 +4841,16 @@ function warehouseApprovalReport(){
     const name=warehouseApproverName();
     return name?translateApp('Configurazione approvata in magazzino da')+': '+name:translateApp('Approvazione del magazzino da richiedere');
 }
+const shipmentReportTitle='Totali spedizione';
 function shipmentReportTotals(){
     return [
-        pallets.length+' pallet · Superficie '+(totalPalletArea(pallets)/10000).toLocaleString(document.documentElement.lang==='en'?'en-GB':'it-IT',{maximumFractionDigits:4})+' m²',
-        'Volume '+formatVolume(shipmentVolume(pallets))+' · Peso lordo '+formatShipmentWeight(pallets),
-        ...(currentDivisor()?['Peso volumetrico '+formatVolumetricWeight(pallets)]:[])
+        ['Pedane totali',pallets.length],
+        ['Colli totali',pallets.reduce((sum,pallet)=>sum+pallet.boxes.length,0)],
+        ['Peso lordo totale',formatShipmentWeight(pallets)],
+        ['Peso volumetrico totale',currentDivisor()?formatVolumetricWeight(pallets):'—'],
+        ['Volume complessivo',formatVolume(shipmentVolume(pallets))],
+        ['Superficie totale a terra',(totalPalletArea(pallets)/10000).toLocaleString(
+            document.documentElement.lang==='en'?'en-GB':'it-IT',{maximumFractionDigits:4})+' m²']
     ];
 }
 function reportPalletImage(pallet){
@@ -4796,34 +4878,39 @@ function renderShipmentPdf(carrierDetails=null){
             y=48;
             line('Pedana '+(index+1)+' di '+pallets.length+(continued?' · continua':''),true);
         }
-        function line(value,bold=false,translate=true){
+        function line(value,bold=false,translate=true,size=23){
             if(translate)value=translateApp(value);
-            ctx.font=(bold?'bold ':'')+'23px sans-serif';
+            ctx.font=(bold?'bold ':'')+size+'px sans-serif';
+            const lineHeight=size+8;
             ctx.fillStyle='#122034';
             let row='';
             for(const char of String(value)){
                 if(ctx.measureText(row+char).width>900){
-                    ctx.fillText(row,50,y+=29);
+                    ctx.fillText(row,50,y+=lineHeight);
                     row='';
                 }
                 row+=char;
             }
-            ctx.fillText(row,50,y+=29);
+            ctx.fillText(row,50,y+=lineHeight);
         }
         newPage();
-        line('Cliente: '+customer);
-        line('Ordine: '+order);
-        if(carrierDetails){
-            for(const [label,value] of carrierDetails)line(translateApp(label)+': '+value,false,false);
+        if(!carrierDetails){
+            line(translateApp('Cliente')+': '+customer,false,false);
+            line(translateApp('Ordine')+': '+order,false,false);
         }
-        for(const total of totals)line(total);
         if(approval)line(approval,true,false);
         line(pallet.l+' × '+pallet.p+' cm · Altezza '+pallet.height+' cm · '+palletWeightFormat.format(pallet.weight)+' kg lordi (tara '+tare+' kg)');
         line('Volume pedana '+formatVolume(palletVolume(pallet)));
         ctx.drawImage(reportPalletImage(pallet),208,y+20,584,344);
         y+=375;
-        if(carrierDetails)continue;
-        for(const [layer,[z,boxes]] of layersOf(pallet).entries()){
+        if(carrierDetails){
+            const fields=[['Cliente',customer],['Ordine',order],...carrierDetails];
+            for(const [label,value] of fields){
+                if(y>1210)newPage(true);
+                line(translateApp(label)+': '+value,false,false,30);
+            }
+        }
+        for(const [layer,[z,boxes]] of (carrierDetails?[]:layersOf(pallet)).entries()){
             const heading='Piano '+(layer+1)+' · '+(base+z)+' cm · '+boxes.length+' colli · '+
                 palletWeightFormat.format(boxes.reduce((sum,b)=>sum+b.weight,0))+' kg';
             if(y>1260)newPage(true);
@@ -4837,6 +4924,14 @@ function renderShipmentPdf(carrierDetails=null){
                 if(y>1210){newPage(true);line(heading,true);}
                 line(count+' × '+key,false,false);
             }
+        }
+        if(index===pallets.length-1){
+            if(y+320>1360)newPage(true);
+            y+=14;
+            ctx.fillStyle='#eaf0f6';
+            ctx.fillRect(38,y,924,298);
+            line(shipmentReportTitle,true,true,33);
+            for(const [label,value] of totals)line(translateApp(label)+': '+value,true,false,30);
         }
     }
     return shipmentPdf(pages);
@@ -4866,7 +4961,7 @@ async function emailAttachment(createFile,title,message){
 }
 const carrierReportForm=el('carrierReportForm');
 const carrierReportDialog=el('carrierReportDialog');
-const carrierFields={"recipient": "Destinatario della merce", "destination": "Destinazione della merce", "ddt": "Numero DDT", "invoice": "Numero fattura", "preparedBy": "Impiegato dell’ufficio commerciale"};
+const carrierFields={"destination": "Destinazione della merce", "ddt": "Numero DDT", "invoice": "Numero fattura", "preparedBy": "Operatore commerciale LED"};
 function openCarrierReport(){
     if(!pallets.length){appAlert('Calcola le pedane prima di inviare il report.');return;}
     carrierReportForm.reset();
@@ -4902,16 +4997,24 @@ async function printOrder(){
     const root=el('printReportRoot');
     const customer=escapeText(el('orderClient').value||'—'),order=escapeText(el('orderNumber').value||'—');
     const approval=warehouseApprovalReport();
+    const totals='<footer class="print-totals"><h2>'+escapeText(translateApp(shipmentReportTitle))+'</h2><dl>'+
+        shipmentReportTotals().map(([label,value])=>'<dt>'+escapeText(translateApp(label))+
+            '</dt><dd>'+escapeText(value)+'</dd>').join('')+'</dl></footer>';
     root.innerHTML=pallets.map((p,i)=>{
         const picture=reportPalletImage(p);
-        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> <span data-user-text>'+customer+'</span></p><p><strong>Ordine</strong> <span data-user-text>'+order+'</span></p>'+shipmentReportTotals().map(value=>'<p>'+escapeText(value)+'</p>').join('')+(approval?'<p data-user-text><strong>'+escapeText(approval)+'</strong></p>':'')+'</header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div></article>';
+        return '<article class="print-sheet"><header><h1>Pedana '+(i+1)+' di '+pallets.length+'</h1><p><strong>Cliente</strong> <span data-user-text>'+customer+'</span></p><p><strong>Ordine</strong> <span data-user-text>'+order+'</span></p>'+(approval?'<p data-user-text><strong>'+escapeText(approval)+'</strong></p>':'')+'</header><div class="print-pallet-body"><img alt="Figura della pedana" src="'+picture.toDataURL('image/jpeg',.82)+'"><div>'+palletDetails(p)+'</div></div>'+(i===pallets.length-1?totals:'')+'</article>';
     }).join('');
     await Promise.all([...root.querySelectorAll('img')].map(img=>img.decode().catch(()=>{})));
     root.classList.add('measuring');
     for(const page of root.children){
         const limit=269*96/25.4;
+        const totals=page.querySelector('.print-totals');
         const height=page.getBoundingClientRect().height;
-        if(height>limit)page.style.zoom=String(limit/height);
+        if(height>limit&&totals){
+            const body=page.querySelector('.print-pallet-body');
+            const bodyHeight=body.getBoundingClientRect().height;
+            body.style.zoom=String((limit-(height-bodyHeight)-2)/bodyHeight);
+        }else if(height>limit)page.style.zoom=String(limit/height);
     }
     root.classList.remove('measuring');
     localizeAppNode(root);
@@ -4939,7 +5042,7 @@ if ('serviceWorker' in navigator && window.isSecureContext) {
 </dialog>
 <script>
 (() => {
-    const PIN_AVVIO = '070375'; // Cambia solo le cifre tra gli apici.
+    const PIN_AVVIO = '674291'; // Cambia solo le cifre tra gli apici.
     const dialog = document.getElementById('startupPin');
     const form = document.getElementById('startupPinForm');
     const input = document.getElementById('startupPinInput');
